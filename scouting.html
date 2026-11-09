@@ -510,7 +510,7 @@ details.card>summary::-webkit-details-marker{display:none}
 <script>
 (()=>{
 const KEY='scouting-banco-v1';
-const APP_VERSION='2026-11-09.1';
+const APP_VERSION='2026-11-09.2';
 // Zona da baliza onde o jogador mais remata, ex.: "Alto dir. (7)". Empate: "Alto dir. / Baixo esq. (3)".
 function favZone(z){
   // Zonas numeradas 1-6 (em cima 1·2·3, em baixo 4·5·6). Ex.: "+3 −4,5".
@@ -1113,7 +1113,16 @@ $('btnNewGame').onclick=async()=>{
 $('btnReset').onclick=async()=>{if(!await ask('Apagar tudo?','Apaga o plantel, o jogo atual e o histórico da época.','Apagar tudo',true))return;S=blank();save();renderAll()};
 
 /* ---------- exportar ---------- */
-const csvCell=v=>String(v).replace(/[\t\n]/g,' ');
+// Texto para colar no Excel / Google Sheets. Um texto que comece por + ou = é lido como fórmula (#ERROR!),
+// por isso o cabeçalho "+/-" passa a "Saldo +/-" e as zonas "+3 −1,2" passam a "mais 3 · menos 1,2".
+const csvCell=v=>{
+  let s=String(v??'').replace(/[\t\n]/g,' ');
+  if(s==='+/-')return 'Saldo +/-';
+  let m=s.match(/^\+(\S+) −(\S+)$/);if(m)return 'mais '+m[1]+' · menos '+m[2];
+  m=s.match(/^= (\S+)$/);if(m)return 'igual '+m[1];
+  if(/^[=+@]/.test(s)&&!/^\+\d+([.,]\d+)?$/.test(s))return ' '+s;
+  return s;
+};
 // Exportar jogos guardados ou importados (tabela separada por tabulações, para colar no Excel).
 const XL_COLS=[['N.º',r=>r.num],['Jogador',r=>r.name+(r.gk?' (GR)':'')],['Titular',r=>r.st?'Sim':''],['Minutos',r=>fmt(r.min)],['Golos',r=>r.g],['GM em campo',r=>r.gm],['GS em campo',r=>r.gs],['+/-',r=>sign((r.gm||0)-(r.gs||0))],
   ['Remates',r=>r.son==null?'':(r.son||0)+(r.soff||0)],['À baliza',r=>r.son==null?'':r.son],['Zonas +/−',r=>r.zs?favZone(r.zs):''],['Defesas GR',r=>r.sv==null?'':r.sv],
