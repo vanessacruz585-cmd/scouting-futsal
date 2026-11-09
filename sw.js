@@ -1,7 +1,7 @@
 // Guarda a aplicação no aparelho para abrir sem internet.
 // Com rede: abre sempre a versão mais recente do site (e atualiza a cópia guardada).
 // Sem rede (ou rede muito lenta): abre a cópia guardada.
-const CACHE = 'scouting-v3';
+const CACHE = 'scouting-v4';
 const FILES = ['./scouting.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png', './xlsx-export.js', './vendor/exceljs.min.js'];
 const TIMEOUT_MS = 4000;
 
@@ -28,7 +28,8 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   const url = new URL(req.url);
   if (req.method !== 'GET' || url.origin !== location.origin || url.searchParams.has('fresh')) return;
-  const isPage = req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html');
+  // Páginas e o módulo do Excel: rede primeiro (versão mais recente); o resto: cópia guardada primeiro.
+  const isPage = req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html') || url.pathname.endsWith('/xlsx-export.js');
 
   if (isPage) {
     // Rede primeiro, com limite de tempo; se falhar, cópia guardada.
@@ -43,7 +44,7 @@ self.addEventListener('fetch', e => {
         const res = await Promise.race([network, timeout]);
         if (res && res.ok) return res;
       } catch (err) { /* sem rede */ }
-      const cached = await cache.match(req, { ignoreSearch: true }) || await cache.match('./scouting.html');
+      const cached = await cache.match(req, { ignoreSearch: true }) || (req.mode === 'navigate' ? await cache.match('./scouting.html') : undefined);
       if (cached) return cached;
       try { return await network; } catch (err) {
         return new Response('Sem ligação à internet.', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });

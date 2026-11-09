@@ -17,7 +17,17 @@
   const sum = a => (a || []).reduce((x, y) => x + (y || 0), 0);
   const sheetName = (used, s) => { s = String(s).replace(/[\[\]:*?\/\\]/g, '').slice(0, 31) || 'Folha'; let n = s, k = 2; while (used.has(n)) n = s.slice(0, 28) + ' ' + k++; used.add(n); return n; };
   // Link interno para outra folha: escrito como 'Folha'!A1 (sem #), que a ExcelJS grava como "location".
-  const link = (ws, addr, text, target) => { const c = ws.getCell(addr); c.value = { text, hyperlink: "'" + target.replace(/'/g, "''") + "'!A1" }; return c; };
+  // Link para outra folha com a fórmula HIPERLIGAÇÃO, que o Excel segue sempre (os links "internos" da ExcelJS nem sempre funcionam).
+  const link = (ws, addr, text, target) => {
+    const c = ws.getCell(addr), q = s => String(s).replace(/"/g, '""');
+    c.value = { formula: `HYPERLINK("#'${q(target).replace(/'/g, "''")}'!A1","${q(text)}")`, result: text };
+    return c;
+  };
+  // Números guardados como números (sem o aviso "número guardado como texto"), com formato.
+  const PCT = '0%', PM = '+0;-0;0', DEC = '0.0', MMSS = '[mm]:ss';
+  const FRAC = (a, b) => b ? a / b : '–';
+  const T = s => (s || 0) / 86400;
+  const fmtCols = (row, map) => { for (const [col, f] of Object.entries(map)) { const c = row.getCell(+col); if (typeof c.value === 'number') c.numFmt = f; } };
 
   function band(ws, range, text, size = 18) {
     ws.mergeCells(range); const c = ws.getCell(range.split(':')[0]);
@@ -25,9 +35,10 @@
     ws.getRow(c.row).height = 34;
   }
   // Quadrado com valor grande e rótulo pequeno (ocupa 2 colunas × 2 linhas).
-  function tile(ws, row, col, label, value, bg = SKY, color = NAVY, sub) {
+  function tile(ws, row, col, label, value, bg = SKY, color = NAVY, sub, numFmt) {
     for (const r of [row, row + 1]) { ws.mergeCells(r, col, r, col + 1); for (const c of [col, col + 1]) ws.getCell(r, c).fill = fill(bg); }
     const v = ws.getCell(row, col); v.value = value; v.font = font({ bold: true, size: 20, color }); v.alignment = center;
+    if (numFmt && typeof value === 'number') v.numFmt = numFmt;
     const l = ws.getCell(row + 1, col); l.value = sub ? label + '\n' + sub : label; l.font = font({ bold: true, size: 9, color: MUTED }); l.alignment = center;
     ws.getRow(row).height = 38; ws.getRow(row + 1).height = sub ? 28 : 18;
   }
@@ -75,40 +86,43 @@
     const used = new Set(), ws = wb.addWorksheet(sheetName(used, 'Jogo'), { views: [{ showGridLines: false }] });
     const ps = g.players.slice().sort((a, b) => a.num - b.num);
     const names = new Map(ps.map(p => [p, sheetName(used, p.num + ' ' + p.name)]));
-    ws.columns = Array.from({ length: 19 }, (_, i) => ({ width: i === 1 ? 20 : i === 13 ? 19 : 9 }));
-    band(ws, 'A1:S1', `${g.team}  ${g.us}–${g.them}  ${g.opp}`);
+    ws.columns = Array.from({ length: 20 }, (_, i) => ({ width: i === 1 ? 20 : i === 13 ? 19 : 9 }));
+    band(ws, 'A1:T1', `${g.team}  ${g.us}–${g.them}  ${g.opp}`);
     note(ws, 'A2', [venue(g.home), dstr(g.date), 'tempo de jogo ' + mmss(g.dur)].filter(Boolean).join(' · '));
     title(ws, 'A3', 'A equipa neste jogo');
     const tot = k => sum(ps.map(p => p[k]));
     const sOn = tot('son'), sOff = tot('soff'), sv = tot('sv');
     const tiles = [['Golos', g.us, g.opp + ': ' + g.them], ['Remates', g.shUs ?? sOn + sOff, g.shThem != null ? g.opp + ': ' + g.shThem : ''],
       ['À baliza', g.shOnUs ?? sOn, g.shOnThem != null ? g.opp + ': ' + g.shOnThem : ''], ['Faltas', g.fcUs ?? tot('fc'), g.fcThem != null ? g.opp + ': ' + g.fcThem : ''],
-      ['Defesas GR', sv, ''], ['% defesas GR', g.shOnThem ? pct(sv, g.shOnThem) : '–', g.shOnThem != null ? 'de ' + g.shOnThem + ' remates à baliza' : '']];
+      ['Defesas GR', sv, ''], ['% defesas GR', FRAC(sv, g.shOnThem), g.shOnThem != null ? 'de ' + g.shOnThem + ' remates à baliza' : '']];
     tiles.forEach(([l, v, s], i) => {
       const c = 1 + i * 3;
       for (const r of [4, 5, 6]) { ws.mergeCells(r, c, r, c + 2); ws.getCell(r, c).fill = fill(SKY); }
-      const a = ws.getCell(4, c); a.value = v; a.font = font({ bold: true, size: 22, color: NAVY }); a.alignment = center;
+      const a = ws.getCell(4, c); a.value = v; a.font = font({ bold: true, size: 22, color: NAVY }); a.alignment = center; if (l.startsWith('%') && typeof v === 'number') a.numFmt = PCT;
       const b = ws.getCell(5, c); b.value = l; b.font = font({ bold: true, size: 9, color: MUTED }); b.alignment = center;
       const d = ws.getCell(6, c); d.value = s; d.font = font({ size: 9, color: MUTED }); d.alignment = center;
     });
     ws.getRow(4).height = 40;
     title(ws, 'A8', 'Jogadores · clica no nome para abrir a ficha do jogador');
-    const hdr = ['N.º', 'Jogador', 'GR', 'Titular', 'Minutos', 'Golos', 'GM em campo', 'GS em campo', 'Saldo +/-', 'Remates', 'À baliza', 'Fora', '% à baliza', 'Zonas', 'Defesas GR', 'Faltas c.', 'Faltas s.', 'Cartões', 'Momentos ⭐'];
+    const hdr = ['N.º', 'Jogador', 'GR', 'Titular', 'Minutos', 'Golos', 'GM em campo', 'GS em campo', 'Saldo +/-', 'Remates', 'À baliza', 'Fora', '% à baliza', 'Zonas', 'Defesas GR', 'Faltas c.', 'Faltas s.', 'Amarelos', 'Vermelhos', 'Momentos altos'];
     const H = 9; const hr = ws.getRow(H); hr.values = hdr; hr.height = 30;
     hr.eachCell(c => { c.font = font({ bold: true, size: 9, color: NAVY }); c.fill = fill(SKY); c.alignment = center; c.border = thin; });
     ps.forEach((p, k) => {
       const r = H + 1 + k, row = ws.getRow(r), sh = (p.son || 0) + (p.soff || 0), pm = (p.gm || 0) - (p.gs || 0);
-      row.values = [p.num, '', p.gk ? 'GR' : '', p.st ? 'Sim' : '', mmss(p.min), p.g, p.gm, p.gs, sign(pm), sh, p.son || 0, p.soff || 0, sh ? pct(p.son || 0, sh) : '–',
-        p.zs && sum(p.zs) ? zoneLabel(p.zs) : '–', p.sv || 0, p.fc, p.fs, (p.y ? p.y + ' 🟨' : '') + (p.r ? ' 🟥' : ''), p.hl];
-      row.eachCell({ includeEmpty: true }, (c, n) => { if (n > 19) return; c.font = font(); c.alignment = { horizontal: n === 2 ? 'left' : 'center', vertical: 'middle' }; c.border = thin; });
+      row.values = [p.num, '', p.gk ? 'GR' : '', p.st ? 'Sim' : '', T(p.min), p.g, p.gm, p.gs, pm, sh, p.son || 0, p.soff || 0, FRAC(p.son || 0, sh),
+        p.zs && sum(p.zs) ? zoneLabel(p.zs) : '–', p.sv || 0, p.fc, p.fs, p.y || 0, p.r || 0, p.hl];
+      fmtCols(row, { 5: MMSS, 9: PM, 13: PCT });
+      row.eachCell({ includeEmpty: true }, (c, n) => { if (n > 20) return; c.font = font(); c.alignment = { horizontal: n === 2 ? 'left' : 'center', vertical: 'middle' }; c.border = thin; });
       const nm = link(ws, 'B' + r, p.name, names.get(p)); nm.font = font({ bold: true, underline: true, color: BLUE });
       if (p.g) { ws.getCell(r, 6).fill = fill('FFC9EBD7'); ws.getCell(r, 6).font = font({ bold: true, color: GREEN }); }
       ws.getCell(r, 9).font = font({ bold: true, color: pm > 0 ? GREEN : pm < 0 ? RED : MUTED });
-      if (p.r) ws.getCell(r, 18).fill = fill(REDC); else if (p.y) ws.getCell(r, 18).fill = fill(YEL);
+      if (p.y) { ws.getCell(r, 18).fill = fill('FFF2C230'); ws.getCell(r, 18).font = font({ bold: true }); }
+      if (p.r) { ws.getCell(r, 19).fill = fill(RED); ws.getCell(r, 19).font = font({ bold: true, color: WHITE }); }
     });
     const rt = H + 1 + ps.length, tr = ws.getRow(rt);
-    tr.values = ['', 'Total', '', '', mmss(tot('min')), tot('g'), '', '', '', sOn + sOff, sOn, sOff, (sOn + sOff) ? pct(sOn, sOn + sOff) : '–', '', sv, tot('fc'), tot('fs'), '', tot('hl')];
-    tr.eachCell({ includeEmpty: true }, (c, n) => { if (n > 19) return; c.font = font({ bold: true }); c.fill = fill(PAPER); c.alignment = { horizontal: n === 2 ? 'left' : 'center' }; });
+    tr.values = ['', 'Total', '', '', T(tot('min')), tot('g'), '', '', '', sOn + sOff, sOn, sOff, FRAC(sOn, sOn + sOff), '', sv, tot('fc'), tot('fs'), tot('y'), tot('r'), tot('hl')];
+    tr.eachCell({ includeEmpty: true }, (c, n) => { if (n > 20) return; c.font = font({ bold: true }); c.fill = fill(PAPER); c.alignment = { horizontal: n === 2 ? 'left' : 'center' }; });
+    fmtCols(tr, { 5: '[h]:mm:ss', 13: PCT });
     note(ws, 'A' + (rt + 2), 'GM/GS = golos marcados/sofridos com o jogador em campo. Zonas: 1-3 em cima, 4-6 em baixo, da esquerda para a direita (baliza vista de frente).');
     ws.views = [{ state: 'frozen', xSplit: 2, ySplit: H, showGridLines: false }];
 
@@ -121,21 +135,21 @@
       note(sh, 'B3', `${p.st ? 'Titular' : 'Suplente'} · ${mmss(p.min)} jogados · ${g.team} ${g.us}–${g.them} ${g.opp} · ${dstr(g.date)}`);
       title(sh, 'B5', 'Neste jogo');
       const shots = (p.son || 0) + (p.soff || 0), pm = (p.gm || 0) - (p.gs || 0), share = g.dur ? (p.min || 0) / g.dur : 0;
-      tile(sh, 6, 2, 'Minutos', mmss(p.min)); tile(sh, 6, 5, '% do tempo de jogo', Math.round(share * 100) + '%');
-      tile(sh, 6, 8, 'Titular', p.st ? 'Sim' : 'Não'); tile(sh, 6, 11, 'Momentos ⭐', p.hl || 0);
+      tile(sh, 6, 2, 'Minutos', T(p.min), SKY, NAVY, '', MMSS); tile(sh, 6, 5, '% do tempo de jogo', share, SKY, NAVY, '', PCT);
+      tile(sh, 6, 8, 'Titular', p.st ? 'Sim' : 'Não'); tile(sh, 6, 11, 'Momentos altos', p.hl || 0);
       sh.mergeCells('B8:L8'); const bar = sh.getCell('B8'); const n = Math.round(share * 40);
       bar.value = '█'.repeat(n) + '░'.repeat(40 - n); bar.font = font({ color: BLUE }); sh.getRow(8).height = 16;
       tile(sh, 10, 2, 'Golos', p.g || 0); tile(sh, 10, 5, 'Remates', shots);
-      tile(sh, 10, 8, 'À baliza', p.son || 0, SKY, NAVY, shots ? pct(p.son || 0, shots) : ''); tile(sh, 10, 11, 'Eficácia (golos/remate)', shots ? pct(p.g || 0, shots) : '–');
+      tile(sh, 10, 8, 'À baliza', p.son || 0, SKY, NAVY, shots ? pct(p.son || 0, shots) : ''); tile(sh, 10, 11, 'Eficácia (golos/remate)', FRAC(p.g || 0, shots), SKY, NAVY, '', PCT);
       tile(sh, 13, 2, 'GM em campo', p.gm || 0, GKF, GREEN); tile(sh, 13, 5, 'GS em campo', p.gs || 0, REDF, RED);
-      tile(sh, 13, 8, 'Saldo +/-', sign(pm), SKY, pm > 0 ? GREEN : pm < 0 ? RED : NAVY); tile(sh, 13, 11, 'Remates fora', p.soff || 0);
+      tile(sh, 13, 8, 'Saldo +/-', pm, SKY, pm > 0 ? GREEN : pm < 0 ? RED : NAVY, '', PM); tile(sh, 13, 11, 'Remates fora', p.soff || 0);
       tile(sh, 16, 2, 'Faltas cometidas', p.fc || 0); tile(sh, 16, 5, 'Faltas sofridas', p.fs || 0);
-      tile(sh, 16, 8, '🟨 Amarelos', p.y || 0, YEL); tile(sh, 16, 11, '🟥 Vermelhos', p.r || 0, REDC);
+      tile(sh, 16, 8, 'Amarelos', p.y || 0, YEL); tile(sh, 16, 11, 'Vermelhos', p.r || 0, REDC);
       let row = 19;
       if (p.gk) {
         title(sh, 'B' + row, 'Guarda-redes'); row++;
         tile(sh, row, 2, 'Defesas', p.sv || 0, GKF, GREEN); tile(sh, row, 5, 'Golos sofridos', p.gs || 0, REDF, RED);
-        tile(sh, row, 8, '% defesas', ((p.sv || 0) + (p.gs || 0)) ? pct(p.sv || 0, (p.sv || 0) + (p.gs || 0)) : '–', GKF, GREEN); row += 3;
+        tile(sh, row, 8, '% defesas', FRAC(p.sv || 0, (p.sv || 0) + (p.gs || 0)), GKF, GREEN, '', PCT); row += 3;
       }
       if (p.zs && sum(p.zs)) { title(sh, 'B' + row, 'Onde rematou'); row = goalMap(sh, row + 1, 2, shootCells(p.zs, p.zg || [0, 0, 0, 0, 0, 0]), 3); note(sh, 'B' + (row - 1), readShoot(p.zs, p.zg || [], 'Rematou')); row++; }
       if (p.gk && p.zsv && (sum(p.zsv) + sum(p.zga))) { title(sh, 'B' + row, 'Remates à baliza que recebeu'); row = goalMap(sh, row + 1, 2, gkCells(p.zsv, p.zga || [0, 0, 0, 0, 0, 0]), 3); }
@@ -154,16 +168,16 @@
     const wb = new ExcelJS.Workbook(); wb.creator = 'Scouting do Banco';
     const used = new Set(), ws = wb.addWorksheet(sheetName(used, 'Época'), { views: [{ showGridLines: false }] });
     const ps = A.slice().sort((a, b) => a.num - b.num), names = new Map(ps.map(a => [a, sheetName(used, a.num + ' ' + a.name)]));
-    ws.columns = Array.from({ length: 18 }, (_, i) => ({ width: i === 1 ? 20 : i === 12 ? 19 : 9 }));
-    band(ws, 'A1:R1', `Época ${team || ''} · ${H.length} jogo${H.length === 1 ? '' : 's'}`);
+    ws.columns = Array.from({ length: 19 }, (_, i) => ({ width: i === 1 ? 20 : i === 12 ? 19 : 9 }));
+    band(ws, 'A1:S1', `Época ${team || ''} · ${H.length} jogo${H.length === 1 ? '' : 's'}`);
     const w = H.filter(g => g.us > g.them).length, d = H.filter(g => g.us === g.them).length, l = H.length - w - d;
     const gf = sum(H.map(g => g.us)), ga = sum(H.map(g => g.them)), HS = H.filter(g => g.shUs != null);
     const tiles = [['Jogos', H.length], ['V-E-D', `${w}-${d}-${l}`], ['Golos', `${gf}–${ga}`], ['Pontos', w * 3 + d],
-      ['Remates/jogo', HS.length ? (sum(HS.map(g => g.shUs)) / HS.length).toFixed(1).replace('.', ',') : '–'],
-      ['% defesas GR', HS.length && sum(HS.map(g => g.shOnThem)) ? pct(sum(HS.map(g => g.sv)), sum(HS.map(g => g.shOnThem))) : '–']];
+      ['Remates/jogo', HS.length ? sum(HS.map(g => g.shUs)) / HS.length : '–'],
+      ['% defesas GR', HS.length ? FRAC(sum(HS.map(g => g.sv)), sum(HS.map(g => g.shOnThem))) : '–']];
     tiles.forEach(([lab, v], i) => {
       const c = 1 + i * 3; for (const r of [3, 4]) { ws.mergeCells(r, c, r, c + 2); ws.getCell(r, c).fill = fill(SKY); }
-      const a = ws.getCell(3, c); a.value = v; a.font = font({ bold: true, size: 22, color: NAVY }); a.alignment = center;
+      const a = ws.getCell(3, c); a.value = v; a.font = font({ bold: true, size: 22, color: NAVY }); a.alignment = center; if (typeof v === 'number') a.numFmt = lab.startsWith('%') ? PCT : lab === 'Remates/jogo' ? DEC : '0';
       const b = ws.getCell(4, c); b.value = lab; b.font = font({ bold: true, size: 9, color: MUTED }); b.alignment = center;
     });
     ws.getRow(3).height = 40;
@@ -180,18 +194,21 @@
       row += 8;
     }
     title(ws, 'A' + row, 'Jogadores · clica no nome para abrir a ficha da época'); row++;
-    const hdr = ['N.º', 'Jogador', 'GR', 'Jogos', 'Titular', 'Minutos', 'Min/jogo', 'Golos', 'Golos/40', 'Saldo +/-', 'Remates', '% à baliza', 'Zonas', 'Defesas', '% defesas', 'Faltas c.', 'Faltas s.', 'Cartões'];
+    const hdr = ['N.º', 'Jogador', 'GR', 'Jogos', 'Titular', 'Minutos', 'Min/jogo', 'Golos', 'Golos/40', 'Saldo +/-', 'Remates', '% à baliza', 'Zonas', 'Defesas', '% defesas', 'Faltas c.', 'Faltas s.', 'Amarelos', 'Vermelhos'];
     const hr = ws.getRow(row); hr.values = hdr; hr.height = 30;
     hr.eachCell(c => { c.font = font({ bold: true, size: 9, color: NAVY }); c.fill = fill(SKY); c.alignment = center; c.border = thin; });
     const H0 = row;
     ps.forEach((a, k) => {
       const r = H0 + 1 + k, rw = ws.getRow(r);
-      rw.values = [a.num, '', a.gk ? 'GR' : '', a.called, a.st, mins(a.min), a.played ? mins(a.mpg) : '–', a.g, a.g40 < 0 ? '–' : a.g40.toFixed(1).replace('.', ','), sign(a.pm),
-        a.sht, a.acc < 0 ? '–' : Math.round(a.acc * 100) + '%', sum(a.zs) ? zoneLabel(a.zs) : '–', a.sv, a.svp < 0 ? '–' : Math.round(a.svp * 100) + '%', a.fc, a.fs, (a.y ? a.y + ' 🟨' : '') + (a.r ? ' ' + a.r + ' 🟥' : '')];
-      rw.eachCell({ includeEmpty: true }, (c, n) => { if (n > 18) return; c.font = font(); c.alignment = { horizontal: n === 2 ? 'left' : 'center', vertical: 'middle' }; c.border = thin; });
+      rw.values = [a.num, '', a.gk ? 'GR' : '', a.called, a.st, mins(a.min), a.played ? mins(a.mpg) : '–', a.g, a.g40 < 0 ? '–' : a.g40, a.pm,
+        a.sht, a.acc < 0 ? '–' : a.acc, sum(a.zs) ? zoneLabel(a.zs) : '–', a.sv, a.svp < 0 ? '–' : a.svp, a.fc, a.fs, a.y, a.r];
+      fmtCols(rw, { 9: DEC, 10: PM, 12: PCT, 15: PCT });
+      rw.eachCell({ includeEmpty: true }, (c, n) => { if (n > 19) return; c.font = font(); c.alignment = { horizontal: n === 2 ? 'left' : 'center', vertical: 'middle' }; c.border = thin; });
       link(ws, 'B' + r, a.name, names.get(a)).font = font({ bold: true, underline: true, color: BLUE });
       ws.getCell(r, 10).font = font({ bold: true, color: a.pm > 0 ? GREEN : a.pm < 0 ? RED : MUTED });
       if (a.g) { ws.getCell(r, 8).fill = fill('FFC9EBD7'); ws.getCell(r, 8).font = font({ bold: true, color: GREEN }); }
+      if (a.y) { ws.getCell(r, 18).fill = fill('FFF2C230'); ws.getCell(r, 18).font = font({ bold: true }); }
+      if (a.r) { ws.getCell(r, 19).fill = fill(RED); ws.getCell(r, 19).font = font({ bold: true, color: WHITE }); }
     });
     ws.views = [{ state: 'frozen', xSplit: 2, ySplit: 0, showGridLines: false }];
     // folha com os jogos
@@ -212,17 +229,17 @@
       link(sh, 'B1', '← Voltar à época', ws.name).font = font({ bold: true, underline: true, color: BLUE });
       band(sh, 'B2:L2', `#${a.num} ${a.name}` + (a.gk ? '  ·  GR' : ''));
       note(sh, 'B3', `Convocado em ${a.called} de ${H.length} jogos · jogou ${a.played} · titular ${a.st}`);
-      const teamMin = sum(H.map(g => g.dur)), p40 = (v) => a.min >= 300 ? (v * 2400 / a.min).toFixed(1).replace('.', ',') : '–';
+      const teamMin = sum(H.map(g => g.dur)), p40 = (v) => a.min >= 300 ? v * 2400 / a.min : '–';
       title(sh, 'B5', 'Na época');
       tile(sh, 6, 2, 'Minutos', mins(a.min)); tile(sh, 6, 5, 'Min/jogo', a.played ? mins(a.mpg) : '–');
-      tile(sh, 6, 8, '% do tempo', teamMin ? Math.round(a.min * 100 / teamMin) + '%' : '–'); tile(sh, 6, 11, 'Momentos ⭐', a.hl);
-      tile(sh, 9, 2, 'Golos', a.g); tile(sh, 9, 5, 'Golos/40 min', p40(a.g)); tile(sh, 9, 8, 'Remates', a.sht);
-      tile(sh, 9, 11, 'Eficácia (golos/remate)', a.sht ? pct(a.g, a.sht) : '–');
+      tile(sh, 6, 8, '% do tempo', FRAC(a.min, teamMin), SKY, NAVY, '', PCT); tile(sh, 6, 11, 'Momentos altos', a.hl);
+      tile(sh, 9, 2, 'Golos', a.g); tile(sh, 9, 5, 'Golos/40 min', p40(a.g), SKY, NAVY, '', DEC); tile(sh, 9, 8, 'Remates', a.sht);
+      tile(sh, 9, 11, 'Eficácia (golos/remate)', FRAC(a.g, a.sht), SKY, NAVY, '', PCT);
       tile(sh, 12, 2, 'GM em campo', a.gm, GKF, GREEN); tile(sh, 12, 5, 'GS em campo', a.gs, REDF, RED);
-      tile(sh, 12, 8, 'Saldo +/-', sign(a.pm), SKY, a.pm > 0 ? GREEN : a.pm < 0 ? RED : NAVY); tile(sh, 12, 11, 'À baliza', a.son, SKY, NAVY, a.sht ? pct(a.son, a.sht) : '');
-      tile(sh, 15, 2, 'Faltas cometidas', a.fc); tile(sh, 15, 5, 'Faltas sofridas', a.fs); tile(sh, 15, 8, '🟨 Amarelos', a.y, YEL); tile(sh, 15, 11, '🟥 Vermelhos', a.r, REDC);
+      tile(sh, 12, 8, 'Saldo +/-', a.pm, SKY, a.pm > 0 ? GREEN : a.pm < 0 ? RED : NAVY, '', PM); tile(sh, 12, 11, 'À baliza', a.son, SKY, NAVY, a.sht ? pct(a.son, a.sht) : '');
+      tile(sh, 15, 2, 'Faltas cometidas', a.fc); tile(sh, 15, 5, 'Faltas sofridas', a.fs); tile(sh, 15, 8, 'Amarelos', a.y, YEL); tile(sh, 15, 11, 'Vermelhos', a.r, REDC);
       let row = 18;
-      if (a.gk) { title(sh, 'B' + row, 'Guarda-redes'); row++; tile(sh, row, 2, 'Defesas', a.sv, GKF, GREEN); tile(sh, row, 5, 'Golos sofridos', a.gs, REDF, RED); tile(sh, row, 8, '% defesas', a.svp < 0 ? '–' : Math.round(a.svp * 100) + '%', GKF, GREEN); row += 3; }
+      if (a.gk) { title(sh, 'B' + row, 'Guarda-redes'); row++; tile(sh, row, 2, 'Defesas', a.sv, GKF, GREEN); tile(sh, row, 5, 'Golos sofridos', a.gs, REDF, RED); tile(sh, row, 8, '% defesas', a.svp < 0 ? '–' : a.svp, GKF, GREEN, '', PCT); row += 3; }
       if (sum(a.zs)) { title(sh, 'B' + row, 'Onde remata'); row = goalMap(sh, row + 1, 2, shootCells(a.zs, a.zg), 3); note(sh, 'B' + (row - 1), readShoot(a.zs, a.zg, 'Remata')); row++; }
       if (a.gk && (sum(a.zsv) + sum(a.zga))) { title(sh, 'B' + row, 'Remates à baliza que recebeu'); row = goalMap(sh, row + 1, 2, gkCells(a.zsv, a.zga), 3); }
       // jogo a jogo
@@ -231,7 +248,8 @@
       th.eachCell(c => { if (c.value) { c.font = font({ bold: true, size: 9, color: NAVY }); c.fill = fill(SKY); c.alignment = center; } });
       a.games.slice().sort((x, y) => x.g.date - y.g.date).forEach(({ g, r }, i) => {
         const rr = sh.getRow(row + 1 + i), pm = (r.gm || 0) - (r.gs || 0);
-        rr.values = ['', dstr(g.date), g.opp + (g.home != null ? ' (' + (g.home ? 'C' : 'F') + ')' : ''), '', g.us + '–' + g.them, mins(r.min), '', r.g, sign(pm), '', (r.son || 0) + (r.soff || 0), r.fc];
+        rr.values = ['', dstr(g.date), g.opp + (g.home != null ? ' (' + (g.home ? 'C' : 'F') + ')' : ''), '', g.us + '–' + g.them, mins(r.min), '', r.g, pm, '', (r.son || 0) + (r.soff || 0), r.fc];
+        fmtCols(rr, { 9: PM });
         rr.eachCell(c => { c.font = font(); c.alignment = { horizontal: 'center' }; });
         sh.getCell(row + 1 + i, 9).font = font({ bold: true, color: pm > 0 ? GREEN : pm < 0 ? RED : MUTED });
       });
