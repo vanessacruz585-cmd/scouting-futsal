@@ -405,6 +405,7 @@ details.card>summary::-webkit-details-marker{display:none}
     <div class="btnrow">
       <button class="btn" id="btnCsv">Copiar para Excel</button>
       <button class="btn sec" id="btnCopy">Copiar resumo</button>
+      <button class="btn xlsxbtn" id="btnXlsxGame">📊 Descarregar Excel</button>
       <button class="btn sec" id="btnHl">⭐ Momento alto</button>
       <button class="btn" id="btnSendGame">📤 Enviar jogo à equipa</button>
     </div>
@@ -415,7 +416,7 @@ details.card>summary::-webkit-details-marker{display:none}
     <div id="seasonBody"></div>
     <h3 class="sub">Partilhar com a equipa</h3>
     <p class="pmeta">Quem regista envia os jogos pelo WhatsApp ou por e-mail. Quem recebe copia a mensagem inteira, cola-a aqui e carrega em Importar. Os jogos que já existem não se repetem. Os jogadores são reconhecidos pelo número da camisola.</p>
-    <div class="btnrow"><button class="btn sec" id="btnSendAll">📤 Enviar todos os jogos</button><button class="btn sec" id="btnXlSeason">📋 Copiar época para Excel</button></div>
+    <div class="btnrow"><button class="btn sec" id="btnSendAll">📤 Enviar todos os jogos</button><button class="btn sec" id="btnXlSeason">📋 Copiar época para Excel</button><button class="btn xlsxbtn" id="btnXlsxSeason">📊 Descarregar Excel da época</button></div>
     <label class="lbl" for="importTxt">Importar jogos recebidos</label>
     <textarea class="bulk" id="importTxt" style="min-height:70px" placeholder="Cola aqui a mensagem inteira (WhatsApp ou e-mail)"></textarea>
     <div class="btnrow"><button class="btn" id="btnImport">📥 Importar jogos</button></div>
@@ -507,10 +508,11 @@ details.card>summary::-webkit-details-marker{display:none}
 </div>
 <div class="toast" id="toast"><span id="toastMsg"></span><button id="toastUndo">Anular</button></div>
 
+<script src="xlsx-export.js" defer></script>
 <script>
 (()=>{
 const KEY='scouting-banco-v1';
-const APP_VERSION='2026-11-09.2';
+const APP_VERSION='2026-11-09.3';
 // Zona da baliza onde o jogador mais remata, ex.: "Alto dir. (7)". Empate: "Alto dir. / Baixo esq. (3)".
 function favZone(z){
   // Zonas numeradas 1-6 (em cima 1·2·3, em baixo 4·5·6). Ex.: "+3 −4,5".
@@ -837,6 +839,12 @@ function statsRows(){
 /* ---------- época: histórico e análise por jogador ---------- */
 function archiveGame(){
   if(!S.started||S.archived)return;
+  const g=gameRecord();
+  if(!S.history)S.history=[];
+  S.history.push(g);S.archived=g.id;
+}
+// Registo do jogo atual no formato guardado na época.
+function gameRecord(){
   const t=now(),[a,b]=score(),st=S.starters||[];
   const g={id:uid(),date:Date.now(),team:S.team,opp:S.opp,home:S.home==null?null:S.home,us:a,them:b,dur:Math.round(t),
     fcUs:S.events.filter(e=>e.team==='us'&&e.type==='fc').length,fcThem:S.events.filter(e=>e.team==='opp'&&e.type==='fc').length,
@@ -845,8 +853,7 @@ function archiveGame(){
   const zt=(team,types)=>{const z=[0,0,0,0,0,0];S.events.forEach(e=>{if(e.team===team&&types.includes(e.type)&&e.zone!=null)z[e.zone]++});return z};
   Object.assign(g,{zUs:zt('us',['sh','g']),zUsG:zt('us',['g']),zSv:zt('opp',['sv']),zGa:zt('opp',['g'])});
   Object.assign(g,{shUs:ce('us',['sh','so','g']),shOnUs:ce('us',['sh','g']),shThem:ce('opp',['sv','os','g']),shOnThem:ce('opp',['sv','g']),sv:ce('opp',['sv'])});
-  if(!S.history)S.history=[];
-  S.history.push(g);S.archived=g.id;
+  return g;
 }
 const res=g=>g.us>g.them?'w':g.us<g.them?'l':'d';
 const dShort=ms=>new Date(ms).toLocaleDateString('pt-PT',{day:'2-digit',month:'2-digit'});
@@ -895,7 +902,7 @@ function renderSeason(){
     <div class="tw"><table id="seasonTable"><thead><tr>${SCOLS.map(([k,l])=>`<th data-ssort="${k}">${l}${sSort===k?(sDir<0?' ↓':' ↑'):''}</th>`).join('')}</tr></thead>
     <tbody>${rows.map(a=>`<tr data-pseason="${a.pid}">${SCOLS.map(([k])=>{const v=a[k];const cl=k==='pm'?(v>0?'pos':v<0?'neg':'z'):(v===0?'z':'');return `<td class="${cl}">${cell(a,k)}</td>`}).join('')}</tr>`).join('')}</tbody></table></div><div class="zlegend">Zonas da baliza, vista de frente: <b>1</b> alto esq. · <b>2</b> alto centro · <b>3</b> alto dir. · <b>4</b> baixo esq. · <b>5</b> baixo centro · <b>6</b> baixo dir.</div>
     <h3 class="sub">Jogos guardados</h3>
-    <ul class="games">${H.slice().reverse().map(g=>`<li><span class="gd">${dShort(g.date)}</span><span class="gt">${esc(g.team)} vs ${esc(g.opp)} ${g.home!=null?`<span class="vn">${g.home?'Casa':'Fora'}</span>`:''}</span><span class="res ${res(g)}">${g.us}–${g.them}</span><button class="ibtn xl" data-xlgame="${g.id}" aria-label="Copiar este jogo para Excel" title="Copiar para Excel">📋</button><button class="ibtn" data-delgame="${g.id}" aria-label="Apagar jogo">✕</button></li>`).join('')}</ul>`;
+    <ul class="games">${H.slice().reverse().map(g=>`<li><span class="gd">${dShort(g.date)}</span><span class="gt">${esc(g.team)} vs ${esc(g.opp)} ${g.home!=null?`<span class="vn">${g.home?'Casa':'Fora'}</span>`:''}</span><span class="res ${res(g)}">${g.us}–${g.them}</span><button class="ibtn xl xlsxbtn" data-xlsxgame="${g.id}" aria-label="Descarregar este jogo em Excel" title="Descarregar Excel">📊</button><button class="ibtn xl" data-xlgame="${g.id}" aria-label="Copiar este jogo para Excel" title="Copiar para Excel">📋</button><button class="ibtn" data-delgame="${g.id}" aria-label="Apagar jogo">✕</button></li>`).join('')}</ul>`;
 }
 function openPlayerSeason(pid){
   const a=seasonAgg().find(x=>x.pid===pid);if(!a)return;
@@ -1029,6 +1036,7 @@ document.addEventListener('click',async e=>{
   if(d.to){timeout(d.to);return}
   if(d.pen){togglePen(d.pen);return}
   if(d.ssort){const k=d.ssort;if(sSort===k)sDir*=-1;else{sSort=k;sDir=(k==='name'||k==='num')?1:-1}renderSeason();return}
+  if(d.xlsxgame){const g=(S.history||[]).find(x=>x.id===d.xlsxgame);if(g)downloadXlsx(()=>window.ScoutXLSX.game(g));return}
   if(d.xlgame){const g=(S.history||[]).find(x=>x.id===d.xlgame);if(g)copyText(gameTSV(g),'Jogo copiado · cola no Excel ou Google Sheets','Jogo para Excel');return}
   if(d.delgame){const g=(S.history||[]).find(x=>x.id===d.delgame);if(!g)return;
     if(!await ask('Apagar este jogo da época?',dShort(g.date)+' · '+g.team+' '+g.us+'–'+g.them+' '+g.opp+'. Os números deste jogo deixam de contar.','Apagar jogo',true))return;
@@ -1135,6 +1143,22 @@ function gameTSV(g){
   t+=g.players.slice().sort((a,b)=>a.num-b.num).map(r=>XL_COLS.map(c=>csvCell(c[1](r)??'')).join('\t')).join('\n');
   return t;
 }
+// Descarregar o Excel completo (folha do jogo/época + ficha de cada jogador).
+async function downloadXlsx(make){
+  if(!window.ScoutXLSX){toast('Ainda a carregar. Tenta outra vez dentro de um segundo.');return}
+  toast('A preparar o Excel…');
+  try{const r=await make();if(r==='downloaded')toast('Excel descarregado · vê na pasta Transferências');else if(r==='shared')toast('Excel pronto')}
+  catch(e){toast(navigator.onLine?'Não foi possível criar o Excel. Tenta outra vez.':'Na primeira vez é preciso internet para preparar o Excel.')}
+}
+$('btnXlsxGame').onclick=()=>{
+  const g=(S.history||[]).find(x=>x.id===S.archived)||(S.started?gameRecord():null);
+  if(!g){toast('Ainda não há jogo para descarregar');return}
+  downloadXlsx(()=>window.ScoutXLSX.game(g));
+};
+$('btnXlsxSeason').onclick=()=>{
+  const H=S.history||[];if(!H.length){toast('Ainda não há jogos guardados');return}
+  downloadXlsx(()=>window.ScoutXLSX.season(H,seasonAgg(),teamSet()?S.team:(H[H.length-1].team||'')));
+};
 $('btnXlSeason').onclick=()=>{
   const H=S.history||[];if(!H.length){toast('Ainda não há jogos guardados');return}
   const A=seasonAgg().sort((x,y)=>x.num-y.num);
