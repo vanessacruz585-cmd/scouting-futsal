@@ -242,6 +242,14 @@
   async function deliver(wb, filename) {
     const buf = await wb.xlsx.writeBuffer();
     const type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    // Dentro da página do Claude: a capacidade "downloads" pede confirmação ao utilizador e guarda o ficheiro.
+    if (window.claude && typeof window.claude.use === 'function') {
+      let dl = null; try { dl = await window.claude.use('downloads'); } catch (e) { dl = null; }
+      if (dl) {
+        try { await dl.save({ filename, data: new Blob([buf], { type }) }); return 'downloaded'; }
+        catch (e) { if (e && e.code === 'declined') return 'cancelled'; if (e && e.code === 'rate_limited') throw Object.assign(new Error('busy'), { code: 'rate_limited' }); throw e; }
+      }
+    }
     const file = new File([buf], filename, { type });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try { await navigator.share({ files: [file], title: filename }); return 'shared'; } catch (e) { if (e && e.name === 'AbortError') return 'cancelled'; }
