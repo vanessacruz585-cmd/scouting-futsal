@@ -1,8 +1,8 @@
 // Guarda a aplicação no aparelho para abrir sem internet.
 // Com rede: abre sempre a versão mais recente do site (e atualiza a cópia guardada).
 // Sem rede (ou rede muito lenta): abre a cópia guardada.
-const CACHE = 'scouting-v2';
-const FILES = ['./scouting.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
+const CACHE = 'scouting-v3';
+const FILES = ['./scouting.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png', './xlsx-export.js', './vendor/exceljs.min.js'];
 const TIMEOUT_MS = 4000;
 
 self.addEventListener('install', e => {
