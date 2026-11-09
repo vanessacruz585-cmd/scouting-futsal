@@ -512,7 +512,7 @@ details.card>summary::-webkit-details-marker{display:none}
 <script>
 (()=>{
 const KEY='scouting-banco-v1';
-const APP_VERSION='2026-11-09.5';
+const APP_VERSION='2026-11-09.6';
 // Zona da baliza onde o jogador mais remata, ex.: "Alto dir. (7)". Empate: "Alto dir. / Baixo esq. (3)".
 function favZone(z){
   // Zonas numeradas 1-6 (em cima 1·2·3, em baixo 4·5·6). Ex.: "+3 −4,5".
@@ -1322,17 +1322,21 @@ function extractCode(txt,tag){
   }
   return after.replace(/[^A-Za-z0-9+/=]/g,'');
 }
-$('btnBackup').onclick=()=>{
-  const H=S.history||[];
+$('btnBackup').onclick=async()=>{
+  const H=S.history||[];let code=null;
+  if(canZip){try{code='SCOUTING3:'+await zipB64(JSON.stringify(S))}catch(e){code=null}}
+  if(!code)code='SCOUTING2:'+b64e(JSON.stringify(S));
   const msg='Cópia completa · Scouting do Banco\n'+(teamSet()?S.team:'Equipa')+' · '+S.players.length+' jogadores · '+H.length+' jogo'+(H.length===1?'':'s')+' guardado'+(H.length===1?'':'s')+' · '+new Date().toLocaleDateString('pt-PT')
-    +'\nPara restaurar: Scouting → Plantel e configuração do jogo → Restaurar cópia completa → cola a mensagem inteira.\nSCOUTING2:'+b64e(JSON.stringify(S))+'#FIM';
+    +'\nPara restaurar: Scouting → Plantel e configuração do jogo → Restaurar cópia completa → cola a mensagem inteira.\n'+code+'#FIM';
   shareText(msg,'Cópia completa','Cópia completa copiada · guarda-a numa nota ou envia-a para ti');
 };
 $('btnRestore').onclick=async()=>{
   const raw=$('restoreTxt').value;let data=null;
   try{
-    const code=extractCode(raw,'SCOUTING2:');
-    if(code)data=JSON.parse(b64d(code));
+    const code3=raw.includes('SCOUTING3:')&&canZip?extractCode(raw,'SCOUTING3:'):null;
+    const code=code3?null:extractCode(raw,'SCOUTING2:');
+    if(code3)data=JSON.parse(await unzipB64(code3));
+    else if(code)data=JSON.parse(b64d(code));
     else{ // formato antigo (SCOUTING1: seguido do texto)
       const t=raw.replace(/[\u00AD\u200B-\u200D\uFEFF]/g,'');const a=t.indexOf('{'),b=t.lastIndexOf('}');
       if(a>=0&&b>a)data=JSON.parse(t.slice(a,b+1));
@@ -1363,14 +1367,62 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-fold]');if
 applyFold();
 
 /* ---------- partilhar jogos entre aparelhos ---------- */
-const GTAG='SCOUTJOGOS1:';
-const b64e=str=>{const u=new TextEncoder().encode(str);let b='';u.forEach(c=>b+=String.fromCharCode(c));return btoa(b)};
-const b64d=str=>new TextDecoder().decode(Uint8Array.from(atob(str),c=>c.charCodeAt(0)));
-function gamesMessage(games){
+const GTAG='SCOUTJOGOS1:',GTAG2='SCOUTJOGOS2:';
+const bytesB64=u=>{let b='';for(let i=0;i<u.length;i+=8192)b+=String.fromCharCode.apply(null,u.subarray(i,i+8192));return btoa(b)};
+const b64Bytes=str=>Uint8Array.from(atob(str),c=>c.charCodeAt(0));
+const b64e=str=>bytesB64(new TextEncoder().encode(str));
+const b64d=str=>new TextDecoder().decode(b64Bytes(str));
+// Compressão (como um .zip) para as mensagens ficarem curtas.
+const canZip=(()=>{try{new CompressionStream('deflate-raw');new DecompressionStream('deflate-raw');return true}catch(e){return false}})();
+async function zipB64(str){
+  const s=new Blob([new TextEncoder().encode(str)]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+  return bytesB64(new Uint8Array(await new Response(s).arrayBuffer()));
+}
+async function unzipB64(b64){
+  const s=new Blob([b64Bytes(b64)]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return new Response(s).text();
+}
+// Formato curto dos jogos: cada jogo e cada jogador viram uma lista de valores por esta ordem (sem os nomes dos campos).
+const GKEYS=['id','date','team','opp','home','us','them','dur','fcUs','fcThem','shUs','shOnUs','shThem','shOnThem','sv','zUs','zUsG','zSv','zGa'];
+const PKEYS=['num','name','st','min','g','gm','gs','fc','fs','y','r','hl','son','soff','sv','gk','zs','zg','zsv','zga'];
+const BOOLS=new Set(['home','st','gk']),ZARR=new Set(['zUs','zUsG','zSv','zGa','zs','zg','zsv','zga']);
+function packObj(o,keys,skip){
+  const a=keys.map(k=>{const v=o[k];
+    if(v==null)return null;
+    if(BOOLS.has(k))return v?1:0;
+    if(ZARR.has(k)&&Array.isArray(v)&&v.every(x=>!x))return 0;
+    return v});
+  const extra={};Object.keys(o).forEach(k=>{if(!keys.includes(k)&&!skip.includes(k)&&o[k]!==undefined)extra[k]=o[k]});
+  if(Object.keys(extra).length)a[keys.length]=extra;
+  while(a.length&&a[a.length-1]==null)a.pop();
+  return a;
+}
+function unpackObj(a,keys){
+  const o={};
+  keys.forEach((k,i)=>{let v=a[i];if(v==null)return;
+    if(BOOLS.has(k))v=!!v;else if(ZARR.has(k)&&!Array.isArray(v))v=[0,0,0,0,0,0];
+    o[k]=v});
+  const extra=a[keys.length];if(extra&&typeof extra==='object')Object.keys(extra).forEach(k=>{if(!(k in o))o[k]=extra[k]});
+  return o;
+}
+const packGame=g=>{const a=packObj(g,GKEYS,['players']);while(a.length<GKEYS.length+1)a.push(null);a.push((g.players||[]).map(r=>packObj(r,PKEYS,['pid'])));return a};
+const unpackGame=a=>{const g=unpackObj(a.slice(0,-1),GKEYS);g.players=(a[a.length-1]||[]).map(r=>unpackObj(r,PKEYS));return g};
+async function gamesMessage(games){
   const head=games.length===1
     ?`⚽ ${games[0].team} ${games[0].us}–${games[0].them} ${games[0].opp} (${dShort(games[0].date)})`
     :`⚽ ${games.length} jogos de ${games[0].team} (${dShort(games[0].date)} a ${dShort(games[games.length-1].date)})`;
-  return head+'\nPara importar: Scouting → Época → Importar jogos → cola a mensagem inteira.\n'+GTAG+b64e(JSON.stringify(games))+'#FIM';
+  let code;
+  if(canZip){try{code=GTAG2+await zipB64(JSON.stringify(games.map(packGame)))}catch(e){code=null}}
+  if(!code)code=GTAG+b64e(JSON.stringify(games));
+  return head+'\nImportar: Scouting → Época → Importar jogos\n'+code+'#FIM';
+}
+// Lê os jogos de uma mensagem (formato curto ou antigo).
+async function readGames(txt){
+  if(txt.includes(GTAG2)){
+    if(!canZip)throw new Error('old');
+    return JSON.parse(await unzipB64(extractCode(txt,GTAG2))).map(unpackGame);
+  }
+  return JSON.parse(b64d(extractCode(txt,GTAG)));
 }
 async function shareText(text,title,okMsg){
   if(navigator.share){
@@ -1385,17 +1437,17 @@ $('btnSendGame').onclick=async()=>{
     if(!await ask('Guardar e enviar o jogo?','O jogo ainda não terminou com 🏁. Queres guardá-lo na época tal como está e enviá-lo?','Guardar e enviar'))return;
     archiveGame();save();renderAll();g=S.history.find(x=>x.id===S.archived);
   }
-  shareText(gamesMessage([g]),'Enviar jogo','Jogo copiado · cola no grupo do WhatsApp');
+  shareText(await gamesMessage([g]),'Enviar jogo','Jogo copiado · cola no grupo do WhatsApp');
 };
-$('btnSendAll').onclick=()=>{
+$('btnSendAll').onclick=async()=>{
   const H=S.history||[];if(!H.length){toast('Ainda não há jogos guardados');return}
-  shareText(gamesMessage(H),'Enviar jogos','Jogos copiados · cola no grupo do WhatsApp');
+  shareText(await gamesMessage(H),'Enviar jogos','Jogos copiados · cola no grupo do WhatsApp');
 };
-$('btnImport').onclick=()=>{
-  const txt=$('importTxt').value;const i=txt.indexOf(GTAG);
-  if(i<0){toast('Não encontrei jogos nesta mensagem. Copia a mensagem inteira.');return}
+$('btnImport').onclick=async()=>{
+  const txt=$('importTxt').value;
+  if(!txt.includes(GTAG)&&!txt.includes(GTAG2)){toast('Não encontrei jogos nesta mensagem. Copia a mensagem inteira.');return}
   let games;
-  try{games=JSON.parse(b64d(extractCode(txt,GTAG)))}catch(e){toast('A mensagem está incompleta. Copia-a outra vez, inteira.');return}
+  try{games=await readGames(txt)}catch(e){toast(e&&e.message==='old'?'Este browser é antigo para ler esta mensagem. Atualiza o Chrome ou o Safari.':'A mensagem está incompleta. Copia-a outra vez, inteira.');return}
   if(!Array.isArray(games)){toast('A mensagem não tem jogos válidos');return}
   if(!S.history)S.history=[];
   const byNum=new Map(S.players.map(p=>[p.num,p.id]));
