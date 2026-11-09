@@ -512,7 +512,7 @@ details.card>summary::-webkit-details-marker{display:none}
 <script>
 (()=>{
 const KEY='scouting-banco-v1';
-const APP_VERSION='2026-11-09.3';
+const APP_VERSION='2026-11-09.4';
 // Zona da baliza onde o jogador mais remata, ex.: "Alto dir. (7)". Empate: "Alto dir. / Baixo esq. (3)".
 function favZone(z){
   // Zonas numeradas 1-6 (em cima 1·2·3, em baixo 4·5·6). Ex.: "+3 −4,5".
@@ -1147,7 +1147,7 @@ function gameTSV(g){
 async function downloadXlsx(make){
   if(!window.ScoutXLSX){toast('Ainda a carregar. Tenta outra vez dentro de um segundo.');return}
   toast('A preparar o Excel…');
-  try{const r=await make();if(r==='downloaded')toast('Excel descarregado · vê na pasta Transferências');else if(r==='shared')toast('Excel pronto')}
+  try{const r=await make();if(r==='downloaded')toast('Excel descarregado · vê na pasta Transferências');else if(r==='shared')toast('Excel pronto');else if(r==='cancelled')toast('Descarga cancelada')}
   catch(e){toast(navigator.onLine?'Não foi possível criar o Excel. Tenta outra vez.':'Na primeira vez é preciso internet para preparar o Excel.')}
 }
 $('btnXlsxGame').onclick=()=>{
