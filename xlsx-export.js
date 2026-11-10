@@ -42,6 +42,11 @@
     const l = ws.getCell(row + 1, col); l.value = sub ? label + '\n' + sub : label; l.font = font({ bold: true, size: 9, color: MUTED }); l.alignment = center;
     ws.getRow(row).height = 38; ws.getRow(row + 1).height = sub ? 28 : 18;
   }
+  function subBand(ws, row, text) {
+    ws.mergeCells(row, 2, row, 12); const c = ws.getCell(row, 2);
+    c.value = text; c.font = font({ bold: true, size: 12, color: WHITE }); c.fill = fill(BLUE); c.alignment = { vertical: 'middle', indent: 1 };
+    ws.getRow(row).height = 24;
+  }
   function note(ws, addr, text) { const c = ws.getCell(addr); c.value = text; c.font = font({ size: 9, italic: true, color: MUTED }); }
   function title(ws, addr, text) { const c = ws.getCell(addr); c.value = text; c.font = font({ bold: true, size: 11, color: NAVY }); }
 
@@ -147,28 +152,33 @@
       band(sh, 'B2:L2', `#${p.num} ${p.name}` + (p.gk ? '  ·  GR' : ''));
       note(sh, 'B3', `${p.st ? 'Titular' : 'Suplente'} · ${mmss(p.min)} jogados · ${g.team} ${g.us}–${g.them} ${g.opp} · ${dstr(g.date)}`);
       title(sh, 'B5', 'Neste jogo');
-      const shots = (p.son || 0) + (p.soff || 0), pm = (p.gm || 0) - (p.gs || 0), share = g.dur ? (p.min || 0) / g.dur : 0;
-      tile(sh, 6, 2, 'Minutos', T(p.min), SKY, NAVY, '', MMSS); tile(sh, 6, 5, '% do tempo de jogo', share, SKY, NAVY, '', PCT);
-      tile(sh, 6, 8, 'Titular', p.st ? 'Sim' : 'Não'); tile(sh, 6, 11, 'Momentos altos', p.hl || 0);
-      sh.mergeCells('B8:L8'); const bar = sh.getCell('B8'); const n = Math.round(share * 40);
-      bar.value = '█'.repeat(n) + '░'.repeat(40 - n); bar.font = font({ color: BLUE }); sh.getRow(8).height = 16;
-      tile(sh, 10, 2, 'Golos', p.g || 0); tile(sh, 10, 5, 'Remates', shots);
-      tile(sh, 10, 8, 'À baliza', p.son || 0, SKY, NAVY, shots ? pct(p.son || 0, shots) : ''); tile(sh, 10, 11, 'Eficácia (golos/remate)', FRAC(p.g || 0, shots), SKY, NAVY, '', PCT);
-      tile(sh, 13, 2, 'GM em campo', p.gm || 0, GKF, GREEN); tile(sh, 13, 5, 'GS em campo', p.gs || 0, REDF, RED);
-      tile(sh, 13, 8, 'Saldo +/-', pm, SKY, pm > 0 ? GREEN : pm < 0 ? RED : NAVY, '', PM); tile(sh, 13, 11, 'Remates fora', p.soff || 0);
-      tile(sh, 16, 2, 'Faltas cometidas', p.fc || 0); tile(sh, 16, 5, 'Faltas sofridas', p.fs || 0);
-      tile(sh, 16, 8, 'Amarelos', p.y || 0, YEL); tile(sh, 16, 11, 'Vermelhos', p.r || 0, REDC);
-      let row = 19;
-      if (p.gk) {
-        title(sh, 'B' + row, 'Guarda-redes'); row++;
-        tile(sh, row, 2, 'Defesas', p.sv || 0, GKF, GREEN); tile(sh, row, 5, 'Golos sofridos', p.gs || 0, REDF, RED);
-        tile(sh, row, 8, '% defesas', FRAC(p.sv || 0, (p.sv || 0) + (p.gs || 0)), GKF, GREEN, '', PCT); row += 3;
-      }
-      if (p.zs && sum(p.zs)) { title(sh, 'B' + row, 'Onde rematou'); row = goalMap(sh, row + 1, 2, shootCells(p.zs, p.zg || [0, 0, 0, 0, 0, 0]), 3); note(sh, 'B' + (row - 1), readShoot(p.zs, p.zg || [], 'Rematou')); row++; }
-      if (p.gk && p.zsv && (sum(p.zsv) + sum(p.zga))) { title(sh, 'B' + row, 'Remates à baliza que recebeu'); row = goalMap(sh, row + 1, 2, gkCells(p.zsv, p.zga || [0, 0, 0, 0, 0, 0]), 3); }
-      if (!(p.zs && sum(p.zs)) && !(p.gk && p.zsv && sum(p.zsv))) note(sh, 'B' + row, 'Sem zonas da baliza registadas neste jogo.');
+      playerGameBlock(sh, p, g, 5);
     });
     return wb;
+  }
+  // Dados de um jogador num jogo, a começar na linha r0 (título já escrito antes). Devolve a linha seguinte livre.
+  function playerGameBlock(sh, p, g, r0) {
+    const shots = (p.son || 0) + (p.soff || 0), pm = (p.gm || 0) - (p.gs || 0), share = g.dur ? (p.min || 0) / g.dur : 0;
+    tile(sh, r0 + 1, 2, 'Minutos', T(p.min), SKY, NAVY, '', MMSS); tile(sh, r0 + 1, 5, '% do tempo de jogo', share, SKY, NAVY, '', PCT);
+    tile(sh, r0 + 1, 8, 'Titular', p.st ? 'Sim' : 'Não'); tile(sh, r0 + 1, 11, 'Momentos altos', p.hl || 0);
+    sh.mergeCells(r0 + 3, 2, r0 + 3, 12); const bar = sh.getCell(r0 + 3, 2); const n = Math.round(share * 40);
+    bar.value = '█'.repeat(n) + '░'.repeat(40 - n); bar.font = font({ color: BLUE }); sh.getRow(r0 + 3).height = 16;
+    tile(sh, r0 + 5, 2, 'Golos', p.g || 0); tile(sh, r0 + 5, 5, 'Remates', shots);
+    tile(sh, r0 + 5, 8, 'À baliza', p.son || 0, SKY, NAVY, shots ? pct(p.son || 0, shots) : ''); tile(sh, r0 + 5, 11, 'Eficácia (golos/remate)', FRAC(p.g || 0, shots), SKY, NAVY, '', PCT);
+    tile(sh, r0 + 8, 2, 'GM em campo', p.gm || 0, GKF, GREEN); tile(sh, r0 + 8, 5, 'GS em campo', p.gs || 0, REDF, RED);
+    tile(sh, r0 + 8, 8, 'Saldo +/-', pm, SKY, pm > 0 ? GREEN : pm < 0 ? RED : NAVY, '', PM); tile(sh, r0 + 8, 11, 'Remates fora', p.soff || 0);
+    tile(sh, r0 + 11, 2, 'Faltas cometidas', p.fc || 0); tile(sh, r0 + 11, 5, 'Faltas sofridas', p.fs || 0);
+    tile(sh, r0 + 11, 8, 'Amarelos', p.y || 0, YEL); tile(sh, r0 + 11, 11, 'Vermelhos', p.r || 0, REDC);
+    let row = r0 + 14;
+    if (p.gk) {
+      title(sh, 'B' + row, 'Guarda-redes'); row++;
+      tile(sh, row, 2, 'Defesas', p.sv || 0, GKF, GREEN); tile(sh, row, 5, 'Golos sofridos', p.gs || 0, REDF, RED);
+      tile(sh, row, 8, '% defesas', FRAC(p.sv || 0, (p.sv || 0) + (p.gs || 0)), GKF, GREEN, '', PCT); row += 3;
+    }
+    if (p.zs && sum(p.zs)) { title(sh, 'B' + row, 'Onde rematou'); row = goalMap(sh, row + 1, 2, shootCells(p.zs, p.zg || [0, 0, 0, 0, 0, 0]), 3); note(sh, 'B' + (row - 1), readShoot(p.zs, p.zg || [], 'Rematou')); row++; }
+    if (p.gk && p.zsv && (sum(p.zsv) + sum(p.zga))) { title(sh, 'B' + row, 'Remates à baliza que recebeu'); row = goalMap(sh, row + 1, 2, gkCells(p.zsv, p.zga || [0, 0, 0, 0, 0, 0]), 3); }
+    if (!(p.zs && sum(p.zs)) && !(p.gk && p.zsv && sum(p.zsv))) { note(sh, 'B' + row, 'Sem zonas da baliza registadas neste jogo.'); row += 2; }
+    return row;
   }
   function zoneLabel(z) {
     const mx = Math.max(...z), mn = Math.min(...z); if (!mx) return '–';
@@ -257,15 +267,24 @@
       band(sh, 'B2:L2', `#${a.num} ${a.name}` + (a.gk ? '  ·  GR' : ''));
       note(sh, 'B3', `Convocado em ${a.called} de ${H.length} jogos · jogou ${a.played} · titular ${a.st}`);
       const teamMin = sum(H.map(g => g.dur)), p40 = (v) => a.min >= 300 ? v * 2400 / a.min : '–';
-      title(sh, 'B5', 'Na época');
-      tile(sh, 6, 2, 'Minutos', mins(a.min)); tile(sh, 6, 5, 'Min/jogo', a.played ? mins(a.mpg) : '–');
-      tile(sh, 6, 8, '% do tempo', FRAC(a.min, teamMin), SKY, NAVY, '', PCT); tile(sh, 6, 11, 'Momentos altos', a.hl);
-      tile(sh, 9, 2, 'Golos', a.g); tile(sh, 9, 5, 'Golos/40 min', p40(a.g), SKY, NAVY, '', DEC); tile(sh, 9, 8, 'Remates', a.sht);
-      tile(sh, 9, 11, 'Eficácia (golos/remate)', FRAC(a.g, a.sht), SKY, NAVY, '', PCT);
-      tile(sh, 12, 2, 'GM em campo', a.gm, GKF, GREEN); tile(sh, 12, 5, 'GS em campo', a.gs, REDF, RED);
-      tile(sh, 12, 8, 'Saldo +/-', a.pm, SKY, a.pm > 0 ? GREEN : a.pm < 0 ? RED : NAVY, '', PM); tile(sh, 12, 11, 'À baliza', a.son, SKY, NAVY, a.sht ? pct(a.son, a.sht) : '');
-      tile(sh, 15, 2, 'Faltas cometidas', a.fc); tile(sh, 15, 5, 'Faltas sofridas', a.fs); tile(sh, 15, 8, 'Amarelos', a.y, YEL); tile(sh, 15, 11, 'Vermelhos', a.r, REDC);
-      let row = 18;
+      // em cima: o último jogo (só esse jogo); por baixo: o acumulado da época
+      let s0 = 5;
+      if (focus) {
+        const fr = focus.players.find(x => x.pid === a.pid), fn = focus.opp + (focus.home != null ? ' (' + (focus.home ? 'C' : 'F') + ')' : '');
+        subBand(sh, 5, `Último jogo · ${focus.us}–${focus.them} ${fn} · ${dstr(focus.date)}`);
+        if (gName.get(focus)) link(sh, 'B6', 'Abrir este jogo', gName.get(focus)).font = font({ size: 9, underline: true, color: BLUE });
+        if (fr) { note(sh, 'E6', `${fr.st ? 'Titular' : 'Suplente'} · ${mmss(fr.min)} jogados`); s0 = playerGameBlock(sh, fr, focus, 6) + 1; }
+        else { note(sh, 'E6', 'Não esteve convocado neste jogo.'); s0 = 8; }
+        subBand(sh, s0, `Época · acumulado de ${H.length} jogo${H.length === 1 ? '' : 's'}`); s0++;
+      } else title(sh, 'B5', 'Na época');
+      tile(sh, s0 + 1, 2, 'Minutos', mins(a.min)); tile(sh, s0 + 1, 5, 'Min/jogo', a.played ? mins(a.mpg) : '–');
+      tile(sh, s0 + 1, 8, '% do tempo', FRAC(a.min, teamMin), SKY, NAVY, '', PCT); tile(sh, s0 + 1, 11, 'Momentos altos', a.hl);
+      tile(sh, s0 + 4, 2, 'Golos', a.g); tile(sh, s0 + 4, 5, 'Golos/40 min', p40(a.g), SKY, NAVY, '', DEC); tile(sh, s0 + 4, 8, 'Remates', a.sht);
+      tile(sh, s0 + 4, 11, 'Eficácia (golos/remate)', FRAC(a.g, a.sht), SKY, NAVY, '', PCT);
+      tile(sh, s0 + 7, 2, 'GM em campo', a.gm, GKF, GREEN); tile(sh, s0 + 7, 5, 'GS em campo', a.gs, REDF, RED);
+      tile(sh, s0 + 7, 8, 'Saldo +/-', a.pm, SKY, a.pm > 0 ? GREEN : a.pm < 0 ? RED : NAVY, '', PM); tile(sh, s0 + 7, 11, 'À baliza', a.son, SKY, NAVY, a.sht ? pct(a.son, a.sht) : '');
+      tile(sh, s0 + 10, 2, 'Faltas cometidas', a.fc); tile(sh, s0 + 10, 5, 'Faltas sofridas', a.fs); tile(sh, s0 + 10, 8, 'Amarelos', a.y, YEL); tile(sh, s0 + 10, 11, 'Vermelhos', a.r, REDC);
+      let row = s0 + 13;
       if (a.gk) { title(sh, 'B' + row, 'Guarda-redes'); row++; tile(sh, row, 2, 'Defesas', a.sv, GKF, GREEN); tile(sh, row, 5, 'Golos sofridos', a.gs, REDF, RED); tile(sh, row, 8, '% defesas', a.svp < 0 ? '–' : a.svp, GKF, GREEN, '', PCT); row += 3; }
       if (sum(a.zs)) { title(sh, 'B' + row, 'Onde remata'); row = goalMap(sh, row + 1, 2, shootCells(a.zs, a.zg), 3); note(sh, 'B' + (row - 1), readShoot(a.zs, a.zg, 'Remata')); row++; }
       if (a.gk && (sum(a.zsv) + sum(a.zga))) { title(sh, 'B' + row, 'Remates à baliza que recebeu'); row = goalMap(sh, row + 1, 2, gkCells(a.zsv, a.zga), 3); }
