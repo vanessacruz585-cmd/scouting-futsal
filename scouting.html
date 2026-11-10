@@ -512,7 +512,7 @@ details.card>summary::-webkit-details-marker{display:none}
 <script>
 (()=>{
 const KEY='scouting-banco-v1';
-const APP_VERSION='2026-11-10.2';
+const APP_VERSION='2026-11-10.3';
 // Zona da baliza onde o jogador mais remata, ex.: "Alto dir. (7)". Empate: "Alto dir. / Baixo esq. (3)".
 function favZone(z){
   // Zonas numeradas 1-6 (em cima 1·2·3, em baixo 4·5·6). Ex.: "+3 −4,5".
@@ -1192,10 +1192,10 @@ $('btnCopy').onclick=async()=>{
 
 /* ---------- janela de confirmação (sem confirm()/prompt()) ---------- */
 let dlgResolve=null;
-function ask(title,msg,ok='Confirmar',danger=false){
+function ask(title,msg,ok='Confirmar',danger=false,cancel='Cancelar'){
   showTextVal=null;
   $('dTitle').textContent=title;$('dMsg').textContent=msg;$('dText').hidden=true;
-  $('dOk').textContent=ok;$('dOk').className='btn'+(danger?' danger':'');$('dOk').hidden=false;$('dCancel').textContent='Cancelar';
+  $('dOk').textContent=ok;$('dOk').className='btn'+(danger?' danger':'');$('dOk').hidden=false;$('dCancel').textContent=cancel;
   $('dlgBg').classList.add('on');$('dOk').focus();
   return new Promise(r=>{dlgResolve=r});
 }
@@ -1453,16 +1453,22 @@ $('btnImport').onclick=async()=>{
   const byNum=new Map(S.players.map(p=>[p.num,p.id]));
   const pidFor=r=>byNum.get(r.num)||('n'+r.num);
   const day=ms=>new Date(ms).toDateString();
-  let added=0,dup=0;
+  let added=0,dup=0,last=null;
   games.forEach(g=>{
     if(!g||!Array.isArray(g.players))return;
     if(S.history.some(h=>h.id===g.id||(day(h.date)===day(g.date)&&h.opp.trim().toLowerCase()===String(g.opp).trim().toLowerCase()))){dup++;return}
-    S.history.push({...g,players:g.players.map(r=>({...r,pid:pidFor(r)}))});added++;
+    const ng={...g,players:g.players.map(r=>({...r,pid:pidFor(r)}))};S.history.push(ng);added++;last=ng;
   });
   S.history.sort((a,b)=>a.date-b.date);
   save();renderAll();
   if(added){$('importTxt').value='';setFold('epoca',false)}
-  toast((added?added+' jogo'+(added>1?'s':'')+' importado'+(added>1?'s':''):'Nenhum jogo novo')+(dup?' · '+dup+' já existia'+(dup>1?'m':''):''));
+  const msg=(added?added+' jogo'+(added>1?'s':'')+' importado'+(added>1?'s':''):'Nenhum jogo novo')+(dup?' · '+dup+' já existia'+(dup>1?'m':''):'');
+  if(!added||!window.ScoutXLSX){toast(msg);return}
+  // Oferece logo o Excel do jogo importado (ou da época, se vieram vários).
+  if(added===1){
+    if(await ask('Jogo importado',`${last.team} ${last.us}–${last.them} ${last.opp} (${dShort(last.date)}) ficou na Época.`+(dup?' '+dup+' já existia'+(dup>1?'m':'')+'.':'')+' Queres o Excel deste jogo, com a ficha de cada jogador?','📊 Excel deste jogo',false,'Agora não'))
+      downloadXlsx(()=>window.ScoutXLSX.game(last));
+  }else if(await ask(msg,'Os jogos ficaram na Época. Queres o Excel da época? Tem uma folha para cada jogo e a ficha de cada jogador.','📊 Excel da época',false,'Agora não'))$('btnXlsxSeason').click();
 };
 
 /* ---------- funcionar sem internet ---------- */

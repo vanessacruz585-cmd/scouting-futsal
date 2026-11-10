@@ -80,12 +80,8 @@
     return txt;
   }
 
-  // ---------- livro de um jogo ----------
-  function gameBook(ExcelJS, g) {
-    const wb = new ExcelJS.Workbook(); wb.creator = 'Scouting do Banco';
-    const used = new Set(), ws = wb.addWorksheet(sheetName(used, 'Jogo'), { views: [{ showGridLines: false }] });
-    const ps = g.players.slice().sort((a, b) => a.num - b.num);
-    const names = new Map(ps.map(p => [p, sheetName(used, p.num + ' ' + p.name)]));
+  // Folha com o resumo de um jogo e a tabela dos jogadores. nameOf(p) = folha da ficha do jogador (ou nada).
+  function fillGameSheet(ws, g, ps, nameOf, back) {
     ws.columns = Array.from({ length: 20 }, (_, i) => ({ width: i === 1 ? 20 : i === 13 ? 19 : 9 }));
     band(ws, 'A1:T1', `${g.team}  ${g.us}–${g.them}  ${g.opp}`);
     note(ws, 'A2', [venue(g.home), dstr(g.date), 'tempo de jogo ' + mmss(g.dur)].filter(Boolean).join(' · '));
@@ -103,7 +99,7 @@
       const d = ws.getCell(6, c); d.value = s; d.font = font({ size: 9, color: MUTED }); d.alignment = center;
     });
     ws.getRow(4).height = 40;
-    title(ws, 'A8', 'Jogadores · clica no nome para abrir a ficha do jogador');
+    title(ws, 'A8', back ? 'Jogadores · clica no nome para abrir a ficha da época' : 'Jogadores · clica no nome para abrir a ficha do jogador');
     const hdr = ['N.º', 'Jogador', 'GR', 'Titular', 'Minutos', 'Golos', 'GM em campo', 'GS em campo', 'Saldo +/-', 'Remates', 'À baliza', 'Fora', '% à baliza', 'Zonas', 'Defesas GR', 'Faltas c.', 'Faltas s.', 'Amarelos', 'Vermelhos', 'Momentos altos'];
     const H = 9; const hr = ws.getRow(H); hr.values = hdr; hr.height = 30;
     hr.eachCell(c => { c.font = font({ bold: true, size: 9, color: NAVY }); c.fill = fill(SKY); c.alignment = center; c.border = thin; });
@@ -113,7 +109,9 @@
         p.zs && sum(p.zs) ? zoneLabel(p.zs) : '–', p.sv || 0, p.fc, p.fs, p.y || 0, p.r || 0, p.hl];
       fmtCols(row, { 5: MMSS, 9: PM, 13: PCT });
       row.eachCell({ includeEmpty: true }, (c, n) => { if (n > 20) return; c.font = font(); c.alignment = { horizontal: n === 2 ? 'left' : 'center', vertical: 'middle' }; c.border = thin; });
-      const nm = link(ws, 'B' + r, p.name, names.get(p)); nm.font = font({ bold: true, underline: true, color: BLUE });
+      const target = nameOf(p);
+      if (target) link(ws, 'B' + r, p.name, target).font = font({ bold: true, underline: true, color: BLUE });
+      else { ws.getCell('B' + r).value = p.name; ws.getCell('B' + r).font = font({ bold: true }); }
       if (p.g) { ws.getCell(r, 6).fill = fill('FFC9EBD7'); ws.getCell(r, 6).font = font({ bold: true, color: GREEN }); }
       ws.getCell(r, 9).font = font({ bold: true, color: pm > 0 ? GREEN : pm < 0 ? RED : MUTED });
       if (p.y) { ws.getCell(r, 18).fill = fill('FFF2C230'); ws.getCell(r, 18).font = font({ bold: true }); }
@@ -125,6 +123,16 @@
     fmtCols(tr, { 5: '[h]:mm:ss', 13: PCT });
     note(ws, 'A' + (rt + 2), 'GM/GS = golos marcados/sofridos com o jogador em campo. Zonas: 1-3 em cima, 4-6 em baixo, da esquerda para a direita (baliza vista de frente).');
     ws.views = [{ state: 'frozen', xSplit: 2, ySplit: H, showGridLines: false }];
+    if (back) link(ws, 'P2', back.text, back.target).font = font({ bold: true, underline: true, color: BLUE });
+  }
+
+  // ---------- livro de um jogo ----------
+  function gameBook(ExcelJS, g) {
+    const wb = new ExcelJS.Workbook(); wb.creator = 'Scouting do Banco';
+    const used = new Set(), ws = wb.addWorksheet(sheetName(used, 'Jogo'), { views: [{ showGridLines: false }] });
+    const ps = g.players.slice().sort((a, b) => a.num - b.num);
+    const names = new Map(ps.map(p => [p, sheetName(used, p.num + ' ' + p.name)]));
+    fillGameSheet(ws, g, ps, p => names.get(p));
 
     // fichas dos jogadores
     ps.forEach(p => {
@@ -215,12 +223,22 @@
     const wj = wb.addWorksheet(sheetName(used, 'Jogos'), { views: [{ showGridLines: false }] });
     wj.columns = [{ width: 12 }, { width: 22 }, { width: 10 }, { width: 11 }, { width: 11 }, { width: 11 }, { width: 11 }, { width: 11 }];
     band(wj, 'A1:H1', 'Jogos da época', 16);
+    note(wj, 'A2', 'Clica no adversário para abrir esse jogo com os dados de cada jogador.');
+    const HJ = H.slice().sort((a, b) => a.date - b.date), dm = ms => { const d = new Date(ms); return String(d.getDate()).padStart(2, '0') + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
+    const gName = new Map(HJ.map(g => [g, sheetName(used, dm(g.date) + ' ' + g.opp)]));
+    const pidName = new Map(ps.map(a => [a.pid, names.get(a)]));
     const jh = wj.getRow(3); jh.values = ['Data', 'Adversário', 'Casa/Fora', 'Resultado', 'Remates', 'À baliza', 'Remates eles', 'Defesas GR'];
     jh.eachCell(c => { c.font = font({ bold: true, size: 9, color: NAVY }); c.fill = fill(SKY); c.alignment = center; });
-    H.slice().sort((a, b) => a.date - b.date).forEach((g, i) => {
+    HJ.forEach((g, i) => {
       const r = wj.getRow(4 + i); r.values = [dstr(g.date), g.opp, venue(g.home), g.us + '–' + g.them, g.shUs ?? '', g.shOnUs ?? '', g.shThem ?? '', g.sv ?? ''];
       r.eachCell({ includeEmpty: true }, (c, n) => { if (n > 8) return; c.font = font(); c.alignment = { horizontal: n === 2 ? 'left' : 'center' }; c.border = thin; });
+      link(wj, 'B' + (4 + i), g.opp, gName.get(g)).font = font({ bold: true, underline: true, color: BLUE });
       const res = wj.getCell(4 + i, 4); res.font = font({ bold: true, color: WHITE }); res.fill = fill(g.us > g.them ? GREEN : g.us < g.them ? RED : 'FF617789');
+    });
+    // uma folha por jogo, igual à do Excel de um jogo
+    HJ.forEach(g => {
+      const sg = wb.addWorksheet(gName.get(g), { views: [{ showGridLines: false }] });
+      fillGameSheet(sg, g, g.players.slice().sort((a, b) => a.num - b.num), p => pidName.get(p.pid), { text: '← Voltar aos jogos', target: wj.name });
     });
     // fichas da época
     ps.forEach(a => {
@@ -254,6 +272,7 @@
         fmtCols(rr, { 9: PM });
         rr.eachCell(c => { c.font = font(); c.alignment = { horizontal: 'center' }; });
         sh.mergeCells(row + 1 + i, 3, row + 1 + i, 4);
+        if (gName.get(g)) link(sh, 'C' + (row + 1 + i), rr.getCell(3).value, gName.get(g)).font = font({ underline: true, color: BLUE });
         sh.getCell(row + 1 + i, 3).alignment = { horizontal: 'left', shrinkToFit: true };
         sh.getCell(row + 1 + i, 9).font = font({ bold: true, color: pm > 0 ? GREEN : pm < 0 ? RED : MUTED });
       });
