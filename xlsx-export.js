@@ -244,13 +244,16 @@
       if (a.gk && (sum(a.zsv) + sum(a.zga))) { title(sh, 'B' + row, 'Remates à baliza que recebeu'); row = goalMap(sh, row + 1, 2, gkCells(a.zsv, a.zga), 3); }
       // jogo a jogo
       title(sh, 'B' + row, 'Jogo a jogo'); row++;
-      const th = sh.getRow(row); th.values = ['', 'Data', 'Adversário', '', 'Resultado', 'Minutos', '', 'Golos', 'Saldo +/-', '', 'Remates', 'Faltas c.'];
+      const th = sh.getRow(row); th.values = ['', 'Data', 'Adversário', '', 'Resultado', 'Minutos', '', 'Golos', 'Saldo +/-', '', a.gk ? 'Defesas' : 'Remates', a.gk ? 'Golos sofridos' : 'Faltas c.'];
       th.eachCell(c => { if (c.value) { c.font = font({ bold: true, size: 9, color: NAVY }); c.fill = fill(SKY); c.alignment = center; } });
+      sh.mergeCells(row, 3, row, 4);
       a.games.slice().sort((x, y) => x.g.date - y.g.date).forEach(({ g, r }, i) => {
         const rr = sh.getRow(row + 1 + i), pm = (r.gm || 0) - (r.gs || 0);
-        rr.values = ['', dstr(g.date), g.opp + (g.home != null ? ' (' + (g.home ? 'C' : 'F') + ')' : ''), '', g.us + '–' + g.them, mins(r.min), '', r.g, pm, '', (r.son || 0) + (r.soff || 0), r.fc];
+        rr.values = ['', dstr(g.date), g.opp + (g.home != null ? ' (' + (g.home ? 'C' : 'F') + ')' : ''), '', g.us + '–' + g.them, mins(r.min), '', r.g, pm, '', a.gk ? (r.sv || 0) : (r.son || 0) + (r.soff || 0), a.gk ? (r.gs || 0) : r.fc];
         fmtCols(rr, { 9: PM });
         rr.eachCell(c => { c.font = font(); c.alignment = { horizontal: 'center' }; });
+        sh.mergeCells(row + 1 + i, 3, row + 1 + i, 4);
+        sh.getCell(row + 1 + i, 3).alignment = { horizontal: 'left', shrinkToFit: true };
         sh.getCell(row + 1 + i, 9).font = font({ bold: true, color: pm > 0 ? GREEN : pm < 0 ? RED : MUTED });
       });
     });
