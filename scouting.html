@@ -317,6 +317,23 @@ details.card>summary::-webkit-details-marker{display:none}
   .colB{position:sticky;top:calc(var(--hh,170px) + 8px)}
   .colB .timeline{max-height:calc(100vh - var(--hh,170px) - 300px);overflow:auto}
 }
+/* linhas mais compactas quando a lista é estreita (tablet ao alto pequeno, ou deitado com o painel ao lado), para o nome não ficar sem espaço */
+@media(min-width:700px) and (max-width:859px),(min-width:1000px) and (max-width:1299px){
+  .legend,.row{grid-template-columns:76px minmax(0,1fr) 58px 58px 58px 58px 46px 46px 34px;gap:5px}
+  .row{padding:8px 6px}
+  .io{font-size:1rem}
+  .cnt{font-size:1.25rem}.cnt small{font-size:.6rem}
+  .more{font-size:1.5rem}
+  .legend{font-size:.66rem}
+}
+/* ecrã largo mas baixo (tablet deitado com a barra do browser): cabeçalho numa só linha para sobrar espaço para os jogadores */
+@media(min-width:700px) and (max-height:640px){
+  header{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:14px;align-items:center;padding-block:6px}
+  .hrow{grid-column:1;margin:0}
+  .fouls{grid-column:2;margin:0;width:100%;max-width:none}
+  .alerts{grid-column:1/-1;margin-top:6px;max-width:none;width:100%}
+  .alert{padding:4px 10px}.alert button{padding:6px 10px}
+}
 @media(max-width:360px){
   .legend,.row{grid-template-columns:46px 1fr 36px 36px 30px 30px 20px;gap:3px}
   .clock{font-size:1.7rem}
@@ -512,7 +529,7 @@ details.card>summary::-webkit-details-marker{display:none}
 <script>
 (()=>{
 const KEY='scouting-banco-v1';
-const APP_VERSION='2026-11-10.5';
+const APP_VERSION='2026-11-10.6';
 // Zona da baliza onde o jogador mais remata, ex.: "Alto dir. (7)". Empate: "Alto dir. / Baixo esq. (3)".
 function favZone(z){
   // Zonas numeradas 1-6 (em cima 1·2·3, em baixo 4·5·6). Ex.: "+3 −4,5".
