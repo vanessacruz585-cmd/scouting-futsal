@@ -512,7 +512,7 @@ details.card>summary::-webkit-details-marker{display:none}
 <script>
 (()=>{
 const KEY='scouting-banco-v1';
-const APP_VERSION='2026-11-10.3';
+const APP_VERSION='2026-11-10.4';
 // Zona da baliza onde o jogador mais remata, ex.: "Alto dir. (7)". Empate: "Alto dir. / Baixo esq. (3)".
 function favZone(z){
   // Zonas numeradas 1-6 (em cima 1·2·3, em baixo 4·5·6). Ex.: "+3 −4,5".
@@ -1155,9 +1155,13 @@ $('btnXlsxGame').onclick=()=>{
   if(!g){toast('Ainda não há jogo para descarregar');return}
   downloadXlsx(()=>window.ScoutXLSX.game(g));
 };
-$('btnXlsxSeason').onclick=()=>{
+// Excel da época: em cima o último jogo (ou o jogo indicado) e por baixo o acumulado.
+function seasonXlsx(focus){
   const H=S.history||[];if(!H.length){toast('Ainda não há jogos guardados');return}
-  downloadXlsx(()=>window.ScoutXLSX.season(H,seasonAgg(),teamSet()?S.team:(H[H.length-1].team||'')));
+  downloadXlsx(()=>window.ScoutXLSX.season(H,seasonAgg(),teamSet()?S.team:(H[H.length-1].team||''),focus));
+}
+$('btnXlsxSeason').onclick=()=>{
+  seasonXlsx();
 };
 $('btnXlSeason').onclick=()=>{
   const H=S.history||[];if(!H.length){toast('Ainda não há jogos guardados');return}
@@ -1466,9 +1470,9 @@ $('btnImport').onclick=async()=>{
   if(!added||!window.ScoutXLSX){toast(msg);return}
   // Oferece logo o Excel do jogo importado (ou da época, se vieram vários).
   if(added===1){
-    if(await ask('Jogo importado',`${last.team} ${last.us}–${last.them} ${last.opp} (${dShort(last.date)}) ficou na Época.`+(dup?' '+dup+' já existia'+(dup>1?'m':'')+'.':'')+' Queres o Excel deste jogo, com a ficha de cada jogador?','📊 Excel deste jogo',false,'Agora não'))
-      downloadXlsx(()=>window.ScoutXLSX.game(last));
-  }else if(await ask(msg,'Os jogos ficaram na Época. Queres o Excel da época? Tem uma folha para cada jogo e a ficha de cada jogador.','📊 Excel da época',false,'Agora não'))$('btnXlsxSeason').click();
+    if(await ask('Jogo importado',`${last.team} ${last.us}–${last.them} ${last.opp} (${dShort(last.date)}) ficou na Época.`+(dup?' '+dup+' já existia'+(dup>1?'m':'')+'.':'')+' Queres o Excel? Em cima tem este jogo e por baixo o acumulado da época.','📊 Descarregar Excel',false,'Agora não'))
+      seasonXlsx(last);
+  }else if(await ask(msg,'Os jogos ficaram na Época. Queres o Excel? Em cima tem o último jogo e por baixo o acumulado da época.','📊 Descarregar Excel',false,'Agora não'))seasonXlsx();
 };
 
 /* ---------- funcionar sem internet ---------- */

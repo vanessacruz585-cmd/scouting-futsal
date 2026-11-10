@@ -81,11 +81,11 @@
   }
 
   // Folha com o resumo de um jogo e a tabela dos jogadores. nameOf(p) = folha da ficha do jogador (ou nada).
-  function fillGameSheet(ws, g, ps, nameOf, back) {
-    ws.columns = Array.from({ length: 20 }, (_, i) => ({ width: i === 1 ? 20 : i === 13 ? 19 : 9 }));
-    band(ws, 'A1:T1', `${g.team}  ${g.us}–${g.them}  ${g.opp}`);
-    note(ws, 'A2', [venue(g.home), dstr(g.date), 'tempo de jogo ' + mmss(g.dur)].filter(Boolean).join(' · '));
-    title(ws, 'A3', 'A equipa neste jogo');
+  // Bloco de um jogo a começar na linha o+1 (o = 0 numa folha só deste jogo). Devolve a linha seguinte livre.
+  function gameSection(ws, g, ps, nameOf, o, opt = {}) {
+    band(ws, `A${o + 1}:T${o + 1}`, (opt.label || '') + `${g.team}  ${g.us}–${g.them}  ${g.opp}`);
+    note(ws, 'A' + (o + 2), [venue(g.home), dstr(g.date), 'tempo de jogo ' + mmss(g.dur)].filter(Boolean).join(' · '));
+    title(ws, 'A' + (o + 3), 'A equipa neste jogo');
     const tot = k => sum(ps.map(p => p[k]));
     const sOn = tot('son'), sOff = tot('soff'), sv = tot('sv');
     const tiles = [['Golos', g.us, g.opp + ': ' + g.them], ['Remates', g.shUs ?? sOn + sOff, g.shThem != null ? g.opp + ': ' + g.shThem : ''],
@@ -93,15 +93,15 @@
       ['Defesas GR', sv, ''], ['% defesas GR', FRAC(sv, g.shOnThem), g.shOnThem != null ? 'de ' + g.shOnThem + ' remates à baliza' : '']];
     tiles.forEach(([l, v, s], i) => {
       const c = 1 + i * 3;
-      for (const r of [4, 5, 6]) { ws.mergeCells(r, c, r, c + 2); ws.getCell(r, c).fill = fill(SKY); }
-      const a = ws.getCell(4, c); a.value = v; a.font = font({ bold: true, size: 22, color: NAVY }); a.alignment = center; if (l.startsWith('%') && typeof v === 'number') a.numFmt = PCT;
-      const b = ws.getCell(5, c); b.value = l; b.font = font({ bold: true, size: 9, color: MUTED }); b.alignment = center;
-      const d = ws.getCell(6, c); d.value = s; d.font = font({ size: 9, color: MUTED }); d.alignment = center;
+      for (const r of [o + 4, o + 5, o + 6]) { ws.mergeCells(r, c, r, c + 2); ws.getCell(r, c).fill = fill(SKY); }
+      const a = ws.getCell(o + 4, c); a.value = v; a.font = font({ bold: true, size: 22, color: NAVY }); a.alignment = center; if (l.startsWith('%') && typeof v === 'number') a.numFmt = PCT;
+      const b = ws.getCell(o + 5, c); b.value = l; b.font = font({ bold: true, size: 9, color: MUTED }); b.alignment = center;
+      const d = ws.getCell(o + 6, c); d.value = s; d.font = font({ size: 9, color: MUTED }); d.alignment = center;
     });
-    ws.getRow(4).height = 40;
-    title(ws, 'A8', back ? 'Jogadores · clica no nome para abrir a ficha da época' : 'Jogadores · clica no nome para abrir a ficha do jogador');
+    ws.getRow(o + 4).height = 40;
+    title(ws, 'A' + (o + 8), opt.season ? 'Jogadores · clica no nome para abrir a ficha da época' : 'Jogadores · clica no nome para abrir a ficha do jogador');
     const hdr = ['N.º', 'Jogador', 'GR', 'Titular', 'Minutos', 'Golos', 'GM em campo', 'GS em campo', 'Saldo +/-', 'Remates', 'À baliza', 'Fora', '% à baliza', 'Zonas', 'Defesas GR', 'Faltas c.', 'Faltas s.', 'Amarelos', 'Vermelhos', 'Momentos altos'];
-    const H = 9; const hr = ws.getRow(H); hr.values = hdr; hr.height = 30;
+    const H = o + 9; const hr = ws.getRow(H); hr.values = hdr; hr.height = 30;
     hr.eachCell(c => { c.font = font({ bold: true, size: 9, color: NAVY }); c.fill = fill(SKY); c.alignment = center; c.border = thin; });
     ps.forEach((p, k) => {
       const r = H + 1 + k, row = ws.getRow(r), sh = (p.son || 0) + (p.soff || 0), pm = (p.gm || 0) - (p.gs || 0);
@@ -122,8 +122,13 @@
     tr.eachCell({ includeEmpty: true }, (c, n) => { if (n > 20) return; c.font = font({ bold: true }); c.fill = fill(PAPER); c.alignment = { horizontal: n === 2 ? 'left' : 'center' }; });
     fmtCols(tr, { 5: '[h]:mm:ss', 13: PCT });
     note(ws, 'A' + (rt + 2), 'GM/GS = golos marcados/sofridos com o jogador em campo. Zonas: 1-3 em cima, 4-6 em baixo, da esquerda para a direita (baliza vista de frente).');
-    ws.views = [{ state: 'frozen', xSplit: 2, ySplit: H, showGridLines: false }];
-    if (back) link(ws, 'P2', back.text, back.target).font = font({ bold: true, underline: true, color: BLUE });
+    if (opt.back) link(ws, 'P' + (o + 2), opt.back.text, opt.back.target).font = font({ bold: true, underline: true, color: BLUE });
+    return rt + 3;
+  }
+  function fillGameSheet(ws, g, ps, nameOf, back) {
+    ws.columns = Array.from({ length: 20 }, (_, i) => ({ width: i === 1 ? 20 : i === 13 ? 19 : 9 }));
+    gameSection(ws, g, ps, nameOf, 0, { back, season: !!back });
+    ws.views = [{ state: 'frozen', xSplit: 2, ySplit: 9, showGridLines: false }];
   }
 
   // ---------- livro de um jogo ----------
@@ -172,28 +177,33 @@
   }
 
   // ---------- livro da época ----------
-  function seasonBook(ExcelJS, H, A, team) {
+  function seasonBook(ExcelJS, H, A, team, focus) {
     const wb = new ExcelJS.Workbook(); wb.creator = 'Scouting do Banco';
     const used = new Set(), ws = wb.addWorksheet(sheetName(used, 'Época'), { views: [{ showGridLines: false }] });
     const ps = A.slice().sort((a, b) => a.num - b.num), names = new Map(ps.map(a => [a, sheetName(used, a.num + ' ' + a.name)]));
-    ws.columns = Array.from({ length: 19 }, (_, i) => ({ width: i === 1 ? 20 : i === 12 ? 19 : 9 }));
-    band(ws, 'A1:S1', `Época ${team || ''} · ${H.length} jogo${H.length === 1 ? '' : 's'}`);
+    const pidName = new Map(ps.map(a => [a.pid, names.get(a)]));
+    ws.columns = Array.from({ length: 20 }, (_, i) => ({ width: i === 1 ? 20 : i === 12 || i === 13 ? 20 : 9 }));
+    // em cima: o último jogo (ou o jogo pedido), só com os dados desse jogo
+    if (!focus && H.length) focus = H.reduce((x, y) => (y.date > x.date ? y : x));
+    let o = 0;
+    if (focus) o = gameSection(ws, focus, focus.players.slice().sort((a, b) => a.num - b.num), p => pidName.get(p.pid), 0, { label: 'Último jogo · ', season: true }) + 1;
+    band(ws, `A${o + 1}:T${o + 1}`, `Época ${team || ''} · ${H.length} jogo${H.length === 1 ? '' : 's'} · acumulado`);
     const w = H.filter(g => g.us > g.them).length, d = H.filter(g => g.us === g.them).length, l = H.length - w - d;
     const gf = sum(H.map(g => g.us)), ga = sum(H.map(g => g.them)), HS = H.filter(g => g.shUs != null);
     const tiles = [['Jogos', H.length], ['V-E-D', `${w}-${d}-${l}`], ['Golos', `${gf}–${ga}`], ['Pontos', w * 3 + d],
       ['Remates/jogo', HS.length ? sum(HS.map(g => g.shUs)) / HS.length : '–'],
       ['% defesas GR', HS.length ? FRAC(sum(HS.map(g => g.sv)), sum(HS.map(g => g.shOnThem))) : '–']];
     tiles.forEach(([lab, v], i) => {
-      const c = 1 + i * 3; for (const r of [3, 4]) { ws.mergeCells(r, c, r, c + 2); ws.getCell(r, c).fill = fill(SKY); }
-      const a = ws.getCell(3, c); a.value = v; a.font = font({ bold: true, size: 22, color: NAVY }); a.alignment = center; if (typeof v === 'number') a.numFmt = lab.startsWith('%') ? PCT : lab === 'Remates/jogo' ? DEC : '0';
-      const b = ws.getCell(4, c); b.value = lab; b.font = font({ bold: true, size: 9, color: MUTED }); b.alignment = center;
+      const c = 1 + i * 3; for (const r of [o + 3, o + 4]) { ws.mergeCells(r, c, r, c + 2); ws.getCell(r, c).fill = fill(SKY); }
+      const a = ws.getCell(o + 3, c); a.value = v; a.font = font({ bold: true, size: 22, color: NAVY }); a.alignment = center; if (typeof v === 'number') a.numFmt = lab.startsWith('%') ? PCT : lab === 'Remates/jogo' ? DEC : '0';
+      const b = ws.getCell(o + 4, c); b.value = lab; b.font = font({ bold: true, size: 9, color: MUTED }); b.alignment = center;
     });
-    ws.getRow(3).height = 40;
+    ws.getRow(o + 3).height = 40;
     // mapas da equipa
     const us = { zs: [0, 0, 0, 0, 0, 0], zg: [0, 0, 0, 0, 0, 0] }, th = { zsv: [0, 0, 0, 0, 0, 0], zga: [0, 0, 0, 0, 0, 0] };
     const add = (t, z) => { if (z) z.forEach((v, i) => t[i] += v || 0); };
     H.forEach(g => { if (g.zUs) { add(us.zs, g.zUs); add(us.zg, g.zUsG); add(th.zsv, g.zSv); add(th.zga, g.zGa); } else g.players.forEach(r => { add(us.zs, r.zs); add(us.zg, r.zg); if (r.gk) { add(th.zsv, r.zsv); add(th.zga, r.zga); } }); });
-    let row = 6;
+    let row = o + 6;
     if (sum(us.zs) || sum(th.zsv) + sum(th.zga)) {
       title(ws, 'A' + row, 'Onde rematamos'); title(ws, 'J' + row, 'Onde sofremos');
       if (sum(us.zs)) goalMap(ws, row + 1, 1, shootCells(us.zs, us.zg)); else note(ws, 'A' + (row + 1), 'Sem zonas registadas.');
@@ -226,7 +236,6 @@
     note(wj, 'A2', 'Clica no adversário para abrir esse jogo com os dados de cada jogador.');
     const HJ = H.slice().sort((a, b) => a.date - b.date), dm = ms => { const d = new Date(ms); return String(d.getDate()).padStart(2, '0') + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
     const gName = new Map(HJ.map(g => [g, sheetName(used, dm(g.date) + ' ' + g.opp)]));
-    const pidName = new Map(ps.map(a => [a.pid, names.get(a)]));
     const jh = wj.getRow(3); jh.values = ['Data', 'Adversário', 'Casa/Fora', 'Resultado', 'Remates', 'À baliza', 'Remates eles', 'Defesas GR'];
     jh.eachCell(c => { c.font = font({ bold: true, size: 9, color: NAVY }); c.fill = fill(SKY); c.alignment = center; });
     HJ.forEach((g, i) => {
@@ -310,7 +319,7 @@
   const safe = s => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9 ._-]+/g, '-').replace(/\s+/g, ' ').trim();
   window.ScoutXLSX = {
     async game(g) { const X = await loadLib(); const d = new Date(g.date); return deliver(gameBook(X, g), safe(`${g.team} ${g.us}-${g.them} ${g.opp} ${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}.xlsx`)); },
-    async season(H, A, team) { const X = await loadLib(); return deliver(seasonBook(X, H, A, team), safe(`Época ${team || ''} ${new Date().toLocaleDateString('pt-PT').replace(/\//g, '-')}.xlsx`)); },
+    async season(H, A, team, focus) { const X = await loadLib(); return deliver(seasonBook(X, H, A, team, focus), safe(`Época ${team || ''} ${new Date().toLocaleDateString('pt-PT').replace(/\//g, '-')}.xlsx`)); },
     _build: { gameBook, seasonBook, loadLib }
   };
 })();
