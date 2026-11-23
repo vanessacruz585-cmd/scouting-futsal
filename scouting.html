@@ -32,8 +32,10 @@ button:disabled{cursor:default}
 header{background:linear-gradient(135deg,#102f4d,#1d5c8b);color:#fff;padding-block:10px;padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px));position:sticky;top:env(safe-area-inset-top,0px);z-index:20;box-shadow:0 4px 14px rgba(0,0,0,.18)}
 .hrow{display:flex;align-items:center;gap:10px;max-width:900px;margin:0 auto}
 .clock{font-size:2rem;font-weight:900;font-variant-numeric:tabular-nums;line-height:1}
+.clock.over{color:#e6b64a}
 .clockinfo{font-size:.72rem;color:#b9e3fa;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
-.score{margin-left:auto;text-align:right;min-width:0}
+.score{margin-right:auto;text-align:left;min-width:0}
+.clockbox{text-align:right}
 .score b{font-size:1.5rem;font-weight:900;font-variant-numeric:tabular-nums;display:block;line-height:1}
 .score span{font-size:.72rem;color:#cde6f5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:44vw}
 .cbtn{border:0;border-radius:12px;padding:10px 12px;font-weight:800;background:#3fbf7f;color:#06301b;white-space:nowrap}
@@ -328,9 +330,9 @@ details.card>summary::-webkit-details-marker{display:none}
 }
 /* ecrã largo mas baixo (tablet deitado com a barra do browser): cabeçalho numa só linha para sobrar espaço para os jogadores */
 @media(min-width:700px) and (max-height:640px){
-  header{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:14px;align-items:center;padding-block:6px}
-  .hrow{grid-column:1;margin:0}
-  .fouls{grid-column:2;margin:0;width:100%;max-width:none}
+  header{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:14px;align-items:center;padding-block:6px}
+  .hrow{grid-column:2;grid-row:1;margin:0}
+  .fouls{grid-column:1;grid-row:1;margin:0;width:100%;max-width:none}
   .alerts{grid-column:1/-1;margin-top:6px;max-width:none;width:100%}
   .alert{padding:4px 10px}.alert button{padding:6px 10px}
 }
@@ -344,13 +346,13 @@ details.card>summary::-webkit-details-marker{display:none}
 <body>
 <header>
   <div class="hrow">
-    <div>
-      <div class="clock" id="clock">00:00</div>
+    <div class="score"><b id="hScore">0 – 0</b><span id="hTeams">Nós vs Adversário</span></div>
+    <button class="cbtn ghost" id="btnPeriod" title="Próxima parte">⏭</button>
+    <button class="cbtn" id="btnClock">▶ Iniciar</button>
+    <div class="clockbox">
+      <div class="clock" id="clock">20:00</div>
       <div class="clockinfo" id="period">1.ª parte</div>
     </div>
-    <button class="cbtn" id="btnClock">▶ Iniciar</button>
-    <button class="cbtn ghost" id="btnPeriod" title="Próxima parte">⏭</button>
-    <div class="score"><b id="hScore">0 – 0</b><span id="hTeams">Nós vs Adversário</span></div>
   </div>
   <div class="fouls" id="fouls"></div>
   <div class="alerts" id="alerts" aria-live="polite"></div>
@@ -457,7 +459,7 @@ details.card>summary::-webkit-details-marker{display:none}
       <button class="btn" type="submit">Adicionar</button>
     </form>
     <ul class="roster" id="roster"></ul>
-    <p class="pmeta">Futsal: 2 partes de 20 min. O relógio corre sempre: não precisas de o parar quando a bola sai. Quando o árbitro terminar a parte, carrega em <b>⏭</b> (ou em <b>🏁</b> no fim do jogo). Se quiseres, podes parar o relógio com <b>⏸</b>; se não, deixa-o a correr. Os 2 minutos de um vermelho têm cronómetro próprio, em tempo efetivo: carrega em ▶/⏸ na barra vermelha quando a bola anda e para. As faltas acumuladas recomeçam a cada parte.</p>
+    <p class="pmeta">Futsal: 2 partes de 20 min. O relógio do topo conta de 20:00 para 00:00; se a parte continuar, mostra o tempo a mais (+00:15) em amarelo. O relógio corre sempre: não precisas de o parar quando a bola sai. Quando o árbitro terminar a parte, carrega em <b>⏭</b> (ou em <b>🏁</b> no fim do jogo). Se quiseres, podes parar o relógio com <b>⏸</b>; se não, deixa-o a correr. Os 2 minutos de um vermelho têm cronómetro próprio, em tempo efetivo: carrega em ▶/⏸ na barra vermelha quando a bola anda e para. As faltas acumuladas recomeçam a cada parte.</p>
     <p class="pmeta">Antes de cada jogo escolhe os convocados em <b>Preparar jogo</b> e carrega em <b>IN</b> nos titulares. Durante o jogo, <b>IN</b>/<b>OUT</b> regista a entrada e a saída e conta o tempo de cada um.</p>
     <div class="btnrow">
       <button class="btn sec" id="btnNewGame">Novo jogo (manter plantel)</button>
@@ -529,7 +531,7 @@ details.card>summary::-webkit-details-marker{display:none}
 <script>
 (()=>{
 const KEY='scouting-banco-v1';
-const APP_VERSION='2026-11-10.6';
+const APP_VERSION='2026-11-23.1';
 // Zona da baliza onde o jogador mais remata, ex.: "Alto dir. (7)". Empate: "Alto dir. / Baixo esq. (3)".
 function favZone(z){
   // Zonas numeradas 1-6 (em cima 1·2·3, em baixo 4·5·6). Ex.: "+3 −4,5".
@@ -588,6 +590,7 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 const now=()=>S.clock.running?S.clock.base+(Date.now()-S.clock.since)/1000:S.clock.base;
 const fmt=s=>{s=Math.max(0,Math.floor(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')};
 const fmtMin=s=>Math.floor(s/60)+"'";
+const HALF=20*60; // duração de cada parte (futsal: 20 minutos)
 const periodName=p=>S.periods==4?p+'.º período':S.periods==1?'Jogo':p+'.ª parte';
 const periodShort=p=>S.periods==1?'':(S.periods==4?p+'P ':p+'ª ');
 const playerTime=(p,t=now())=>p.secs+(p.onField&&p.enteredAt!=null?t-p.enteredAt:0);
@@ -1027,8 +1030,11 @@ async function timeout(team){
 }
 function tick(){
   const t=now();
-  $('clock').textContent=fmt(t-(S.periodStart[S.period]||0));
-  $('clock').title='Tempo total: '+fmt(t);
+  // Relógio do cabeçalho em contagem decrescente: 20:00 → 00:00 em cada parte; depois mostra o tempo a mais (+00:15).
+  const el=t-(S.periodStart[S.period]||0),left=HALF-el,c=$('clock');
+  c.textContent=left>=0?fmt(Math.ceil(left)):'+'+fmt(-left);
+  c.classList.toggle('over',left<0);
+  c.title='Tempo jogado nesta parte: '+fmt(el)+' · total: '+fmt(t);
   document.querySelectorAll('[data-time]').forEach(el=>{const p=pById(el.dataset.time);if(p)el.textContent=fmt(playerTime(p,t))});
   document.querySelectorAll('[data-time-cell]').forEach(el=>{const p=pById(el.dataset.timeCell);if(p)el.textContent=fmt(playerTime(p,t))});
 }
